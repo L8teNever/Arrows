@@ -1,0 +1,7 @@
+services:
+  arrows:
+    image: ghcr.io/l8tenever/arrows:latest
+    container_name: arrows
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
