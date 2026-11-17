@@ -133,6 +133,8 @@ body {
 #board .preview .end.x { stroke: var(--error); stroke-linecap: round; fill: none; }
 #board .preview { animation: preview-in .15s ease-out; }
 @keyframes preview-in { from { opacity: 0; } }
+#board .preview.out { opacity: 0; transition: opacity .3s; }
+body:not(.dash) { overflow: hidden; } /* Vorschau-Bahn bis zum Bildschirmrand: nie Scrollbalken */
 #board .arrow.focus .body { stroke: var(--primary); }
 #board .arrow.focus .head { fill: var(--primary); }
 #board .arrow.in-way .body { stroke: var(--error); }

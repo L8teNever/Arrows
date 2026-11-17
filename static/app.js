@@ -278,7 +278,9 @@ function drawArrow(a, pts, [dx, dy]) {
 /* Tippen und langes Druecken. Getroffen wird ueber das Raster statt ueber Trefferflaechen im DOM,
    knapp daneben nimmt den naechsten Pfeil. Kurz tippen = Pfeil fliegt (beim Loslassen, egal ob der Finger
    etwas verrutscht). Lange druecken = Vorschau: Weg und Richtung, der Pfeil bleibt liegen. */
-const LONG_PRESS = 350; // ms
+const LONG_PRESS = 350;    // ms bis zur Vorschau
+const PREVIEW_KEEP = 5000; // so lange bleibt die Vorschau nach dem Loslassen
+let previewTimer = 0;
 const pt = board.createSVGPoint();
 let press = null; // { id, pointerId, timer, preview }
 const boardCard = document.querySelector(".board-card");
@@ -287,6 +289,7 @@ boardCard.addEventListener("pointerdown", (e) => {
   pt.x = e.clientX; pt.y = e.clientY;
   const p = pt.matrixTransform(board.getScreenCTM().inverse());
   const id = arrowAt(p.x / C, p.y / C);
+  hidePreview(); // neue Beruehrung: alte Vorschau weg
   if (id < 0) return;
   e.preventDefault();
   try { boardCard.setPointerCapture(e.pointerId); } catch {}
@@ -302,7 +305,7 @@ function pressEnd(e) {
   const { id, preview, timer } = press;
   clearTimeout(timer);
   press = null;
-  if (preview) hidePreview();
+  if (preview) previewTimer = setTimeout(hidePreview, PREVIEW_KEEP, true); // nach dem Loslassen noch 5 s sichtbar
   else tap(id);
 }
 boardCard.addEventListener("pointerup", pressEnd);
@@ -341,8 +344,20 @@ function showPreview(id) {
   g.appendChild(lane);
   // gestrichelte Bahn ab der Spitze
   const [sx, sy] = center([hx, hy]);
-  const reach = block ? steps + 0.45 : steps + 0.1;
-  const ex = sx + dx * reach * C, ey = sy + dy * reach * C;
+  let ex, ey;
+  if (block) {
+    const reach = steps + 0.45;
+    ex = sx + dx * reach * C; ey = sy + dy * reach * C;
+  } else {
+    // frei: Bahn laeuft ueber den Rand hinaus bis an den Bildschirmrand, dort sitzt die Spitze
+    const m = board.getScreenCTM(), pad = 22; // px Abstand zum Bildschirmrand
+    const edge = dx > 0 ? (innerWidth - pad - m.e) / m.a : dx < 0 ? (pad - m.e) / m.a
+               : dy > 0 ? (innerHeight - pad - m.f) / m.d : (pad - m.f) / m.d;
+    const minReach = (steps + 0.1) * C; // mindestens knapp hinter das Feld
+    const along = dx ? (edge - sx) * dx : (edge - sy) * dy; // Strecke bis zum Bildschirmrand
+    const d = Math.max(along - C * 0.34, minReach);          // Platz fuer die Spitze lassen
+    ex = sx + dx * d; ey = sy + dy * d;
+  }
   const path = document.createElementNS(SVGNS, "line");
   path.setAttribute("class", "path");
   path.setAttribute("x1", sx + dx * C * 0.45); path.setAttribute("y1", sy + dy * C * 0.45);
@@ -370,9 +385,17 @@ function showPreview(id) {
   if (block) state.arrows.get(block.hit)?.el?.classList.add("in-way");
   vibrate(12);
 }
-function hidePreview() {
-  board.querySelector(".preview")?.remove();
-  board.querySelectorAll(".arrow.focus, .arrow.in-way").forEach((e) => e.classList.remove("focus", "in-way"));
+function hidePreview(fade = false) {
+  clearTimeout(previewTimer);
+  const g = board.querySelector(".preview:not(.out)");
+  const marks = board.querySelectorAll(".arrow.focus, .arrow.in-way");
+  if (!g && !marks.length) return;
+  const clear = () => marks.forEach((e) => e.classList.remove("focus", "in-way"));
+  if (fade && g && !REDUCED) {
+    g.classList.add("out"); // sanft ausblenden
+    clear();
+    setTimeout(() => g.remove(), 300);
+  } else { g?.remove(); clear(); }
 }
 
 /** Pfeil an Position (in Zellen); ist die Zelle leer, der naechste Pfeil im Umkreis von ~0.8 Zellen. */
@@ -482,6 +505,7 @@ const easeIn = (p) => p * p;
 const easeOutIn = (p) => (p < 0.5 ? 1 - (1 - 2 * p) ** 2 : 1 - (2 * p - 1) ** 2);
 
 async function tap(id) {
+  hidePreview(); // Feld aendert sich, Vorschau waere sonst veraltet
   const a = state.arrows.get(id);
   if (!a || a.removed || a.busy || state.over) return;
   document.querySelectorAll(".arrow.hint").forEach((e) => e.classList.remove("hint"));
