@@ -123,6 +123,20 @@ body {
 #board .arrow.hint .body { stroke: var(--primary); animation: pulse 1s ease-in-out 3; }
 #board .arrow.hint .head { fill: var(--primary); }
 #board .arrow.moving { pointer-events: none; }
+#board, .board-card { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+/* Vorschau beim langen Druecken */
+#board .preview .lane { fill: var(--primary); opacity: .12; }
+#board .preview .path { stroke: var(--primary); stroke-linecap: round; fill: none; }
+#board .preview .end { fill: var(--primary); }
+#board .preview.blocked .lane { fill: var(--error); }
+#board .preview.blocked .path { stroke: var(--error); }
+#board .preview .end.x { stroke: var(--error); stroke-linecap: round; fill: none; }
+#board .preview { animation: preview-in .15s ease-out; }
+@keyframes preview-in { from { opacity: 0; } }
+#board .arrow.focus .body { stroke: var(--primary); }
+#board .arrow.focus .head { fill: var(--primary); }
+#board .arrow.in-way .body { stroke: var(--error); }
+#board .arrow.in-way .head { fill: var(--error); }
 @keyframes pulse { 50% { opacity: .35; } }
 
 /* Buttons */

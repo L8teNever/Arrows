@@ -275,16 +275,105 @@ function drawArrow(a, pts, [dx, dy]) {
   );
 }
 
-/* Tippen: zaehlt schon beim Beruehren (nicht erst beim Loslassen) und wird ueber das Raster
-   aufgeloest statt ueber Trefferflaechen im DOM. Knapp daneben nimmt den naechsten Pfeil. */
+/* Tippen und langes Druecken. Getroffen wird ueber das Raster statt ueber Trefferflaechen im DOM,
+   knapp daneben nimmt den naechsten Pfeil. Kurz tippen = Pfeil fliegt (beim Loslassen, egal ob der Finger
+   etwas verrutscht). Lange druecken = Vorschau: Weg und Richtung, der Pfeil bleibt liegen. */
+const LONG_PRESS = 350; // ms
 const pt = board.createSVGPoint();
-document.querySelector(".board-card").addEventListener("pointerdown", (e) => {
-  if (!state || state.over || !e.isPrimary || e.button > 0) return;
+let press = null; // { id, pointerId, timer, preview }
+const boardCard = document.querySelector(".board-card");
+boardCard.addEventListener("pointerdown", (e) => {
+  if (!state || state.over || !e.isPrimary || e.button > 0 || press) return;
   pt.x = e.clientX; pt.y = e.clientY;
   const p = pt.matrixTransform(board.getScreenCTM().inverse());
   const id = arrowAt(p.x / C, p.y / C);
-  if (id >= 0) { e.preventDefault(); tap(id); }
+  if (id < 0) return;
+  e.preventDefault();
+  try { boardCard.setPointerCapture(e.pointerId); } catch {}
+  press = { id, pointerId: e.pointerId, preview: false };
+  press.timer = setTimeout(() => {
+    if (!press || press.id !== id) return;
+    press.preview = true;
+    showPreview(id);
+  }, LONG_PRESS);
 });
+function pressEnd(e) {
+  if (!press || e.pointerId !== press.pointerId) return;
+  const { id, preview, timer } = press;
+  clearTimeout(timer);
+  press = null;
+  if (preview) hidePreview();
+  else tap(id);
+}
+boardCard.addEventListener("pointerup", pressEnd);
+boardCard.addEventListener("pointercancel", pressEnd); // Browser hat die Geste uebernommen: kurzer Tipp zaehlt trotzdem
+boardCard.addEventListener("contextmenu", (e) => e.preventDefault()); // kein Kontextmenue beim langen Druecken
+
+/** Vorschau: Spur von der Pfeilspitze bis zum Rand bzw. bis zum Pfeil, der im Weg ist. */
+function showPreview(id) {
+  const a = state.arrows.get(id);
+  if (!a || a.removed || a.busy) return;
+  hidePreview();
+  const [dx, dy] = DIRS[a.dir];
+  const [hx, hy] = a.cells[a.cells.length - 1];
+  const block = blockDistance(a);
+  // freie Strecke in Zellen: bis vor das Hindernis, sonst bis knapp hinter den Rand
+  let steps;
+  if (block) steps = block.d - 1;
+  else {
+    steps = dx > 0 ? state.w - 1 - hx : dx < 0 ? hx : dy > 0 ? state.h - 1 - hy : hy;
+    steps += 1;
+  }
+  const g = document.createElementNS(SVGNS, "g");
+  g.setAttribute("class", "preview" + (block ? " blocked" : ""));
+  // Band ueber die ganze Reihe bzw. Spalte, in die der Pfeil fliegt
+  const lane = document.createElementNS(SVGNS, "rect");
+  lane.setAttribute("class", "lane");
+  const bw = C * 0.84, r = bw / 2;
+  if (dx !== 0) {
+    lane.setAttribute("x", 0); lane.setAttribute("width", state.w * C);
+    lane.setAttribute("y", (hy + 0.5) * C - r); lane.setAttribute("height", bw);
+  } else {
+    lane.setAttribute("y", 0); lane.setAttribute("height", state.h * C);
+    lane.setAttribute("x", (hx + 0.5) * C - r); lane.setAttribute("width", bw);
+  }
+  lane.setAttribute("rx", r);
+  g.appendChild(lane);
+  // gestrichelte Bahn ab der Spitze
+  const [sx, sy] = center([hx, hy]);
+  const reach = block ? steps + 0.45 : steps + 0.1;
+  const ex = sx + dx * reach * C, ey = sy + dy * reach * C;
+  const path = document.createElementNS(SVGNS, "line");
+  path.setAttribute("class", "path");
+  path.setAttribute("x1", sx + dx * C * 0.45); path.setAttribute("y1", sy + dy * C * 0.45);
+  path.setAttribute("x2", ex); path.setAttribute("y2", ey);
+  path.setAttribute("stroke-width", C * 0.12);
+  path.setAttribute("stroke-dasharray", `${C * 0.22} ${C * 0.18}`);
+  g.appendChild(path);
+  const end = document.createElementNS(SVGNS, block ? "path" : "polygon");
+  if (block) {
+    // X am Hindernis
+    const k = C * 0.18;
+    end.setAttribute("d", `M${ex - k},${ey - k}L${ex + k},${ey + k}M${ex + k},${ey - k}L${ex - k},${ey + k}`);
+    end.setAttribute("class", "end x");
+    end.setAttribute("stroke-width", C * 0.12);
+  } else {
+    // Pfeilspitze draussen: hier fliegt er raus
+    const px = -dy, py = dx, s = C * 0.26;
+    const tip = [ex + dx * C * 0.34, ey + dy * C * 0.34];
+    end.setAttribute("points", `${tip.join(",")} ${ex + px * s},${ey + py * s} ${ex - px * s},${ey - py * s}`);
+    end.setAttribute("class", "end");
+  }
+  g.appendChild(end);
+  board.insertBefore(g, board.querySelector(".arrow"));
+  a.el.classList.add("focus");
+  if (block) state.arrows.get(block.hit)?.el?.classList.add("in-way");
+  vibrate(12);
+}
+function hidePreview() {
+  board.querySelector(".preview")?.remove();
+  board.querySelectorAll(".arrow.focus, .arrow.in-way").forEach((e) => e.classList.remove("focus", "in-way"));
+}
 
 /** Pfeil an Position (in Zellen); ist die Zelle leer, der naechste Pfeil im Umkreis von ~0.8 Zellen. */
 function arrowAt(fx, fy) {
