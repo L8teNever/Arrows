@@ -1,4 +1,5 @@
 import gzip
+import hashlib
 import os
 from functools import lru_cache
 from urllib.parse import quote
@@ -52,6 +53,46 @@ def access_user(con):
     return db.get_or_create_by_email(con, email) if email else None
 
 
+# ---------- Versionen automatisch aus dem Inhalt ----------
+# Aendert sich eine Datei, aendert sich die Version: der Service Worker im Browser merkt das von selbst,
+# laedt die neue App und alte Caches fliegen raus. Niemand muss Cache oder Cookies loeschen.
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+
+def _hash(*paths: str) -> str:
+    h = hashlib.sha1()
+    for p in paths:
+        with open(os.path.join(_ROOT, p), "rb") as f:
+            h.update(f.read())
+    return h.hexdigest()[:10]
+
+
+GEN = _hash("generator.py")  # neue Level-Logik = neuer Level-Cache
+BUILD = _hash(*(f"static/{f}" for f in ("index.html", "app.js", "style.css", "sw.js", "icon.svg", "manifest.webmanifest")), "generator.py")
+
+
+def _load_text(name: str) -> str:
+    with open(os.path.join(_ROOT, "static", name), encoding="utf-8") as f:
+        return f.read()
+
+
+INDEX_HTML = (
+    _load_text("index.html")
+    .replace("<html lang=\"de\">", f"<html lang=\"de\" data-gen=\"{GEN}\">")
+    .replace("/static/style.css\"", f"/static/style.css?v={BUILD}\"")
+    .replace("/static/app.js\"", f"/static/app.js?v={BUILD}\"")
+)
+SW_JS = _load_text("sw.js").replace("__BUILD__", BUILD).replace("__GEN__", GEN)
+
+
+def _cached_text(body: str, mimetype: str, etag: str) -> Response:
+    """Immer beim Server nachfragen, unveraendert kommt nur ein kurzes 304 zurueck."""
+    resp = Response(body, mimetype=mimetype)
+    resp.set_etag(etag)
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp.make_conditional(request)
+
+
 @lru_cache(maxsize=512)
 def cached_level(n: int) -> dict:
     return generate_level(n)
@@ -59,7 +100,7 @@ def cached_level(n: int) -> dict:
 
 @app.get("/")
 def index():
-    return send_from_directory(app.static_folder, "index.html")
+    return _cached_text(INDEX_HTML, "text/html", BUILD)
 
 
 @app.get("/<name>")
@@ -67,7 +108,7 @@ def player(name: str):
     """/Simon spielt mit Simons Konto, ein neuer Name legt beim ersten Laden ein Konto an."""
     if not db.valid_name(name):
         abort(404)
-    return send_from_directory(app.static_folder, "index.html")
+    return _cached_text(INDEX_HTML, "text/html", BUILD)
 
 
 def _need_name(name: str):
@@ -199,9 +240,7 @@ def manifest():
 
 @app.get("/sw.js")
 def service_worker():
-    resp = send_from_directory(app.static_folder, "sw.js", mimetype="text/javascript")
-    resp.headers["Cache-Control"] = "no-cache"  # Browser soll Updates des Workers sofort sehen
-    return resp
+    return _cached_text(SW_JS, "text/javascript", BUILD)  # Browser sieht Updates des Workers sofort
 
 
 @app.get("/<any('icon-192.png', 'icon-512.png', 'icon-512-maskable.png'):name>")
@@ -216,14 +255,25 @@ def icon(name: str):
 def level(n: int):
     if n < 1 or n > MAX_LEVEL:
         abort(404)
+    # Dauerhaft gespeichert wird im Service Worker (pro Generator-Version). Der Browser fragt hier nur
+    # kurz nach (304), damit eine neue Level-Logik nie an einem alten Browser-Cache haengen bleibt.
     resp = jsonify(cached_level(n))
-    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-    return resp
+    resp.set_etag(f"{GEN}-{n}")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp.make_conditional(request)
 
 
 @app.get("/healthz")
 def health():
     return {"ok": True}
+
+
+@app.after_request
+def static_versions(resp: Response):
+    """Dateien mit ?v=<Version> aendern sich nie: fuer immer cachen, neue Version = neue Adresse."""
+    if request.path.startswith("/static/") and request.args.get("v") == BUILD and resp.status_code == 200:
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
 
 
 @app.after_request

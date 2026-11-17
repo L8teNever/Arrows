@@ -25,7 +25,7 @@ Das Image baut GitHub Actions bei jedem Push auf `main` nach `ghcr.io/l8tenever/
 
 - Keine externen Schriften oder Bibliotheken; die Icons sind ein kleines SVG im HTML.
 - Service Worker: App und gespielte Level bleiben auf dem Gerät, danach geht es offline. Das nächste Level wird einmal im Leerlauf mitgeladen.
-- Level-Antworten sind gzip-komprimiert und für immer cachebar (gleiche Nummer = gleiches Level).
+- Level-Antworten sind gzip-komprimiert und bleiben im Service Worker pro Generator-Version gespeichert (gleiche Nummer = gleiches Level). Die Seite selbst fragt beim Öffnen kurz beim Server nach (meist nur ein 304).
 - Keine Dauerschleifen oder Timer: gezeichnet wird nur, solange ein Pfeil fliegt.
 - Spielfeld: ein Belegungsraster statt Neuberechnung, ein Klick-Listener, Punkteraster als SVG-Muster.
 - „Weniger Bewegung“ im System kürzt alle Animationen.
@@ -33,7 +33,7 @@ Das Image baut GitHub Actions bei jedem Push auf `main` nach `ghcr.io/l8tenever/
 ## Entwicklung
 
 - `generator.py` erzeugt die Level, `app.py` ist der Flask-Server, `static/` das Frontend.
-- Nach Änderungen an HTML/CSS/JS `VERSION` in `static/sw.js` hochzählen, sonst bleibt am Handy die alte Version im Cache.
+- Versionen laufen automatisch: Der Server bildet sie aus dem Inhalt der Dateien (`BUILD`, `GEN` in `app.py`) und setzt sie in `sw.js` und die Adressen von CSS/JS ein. Nach einem Deploy holt sich jedes Gerät die neue Version von selbst, niemand muss Cache oder Cookies löschen.
 - Icons neu erzeugen: `python icons.py`
 
 ## Login über Cloudflare Zero Trust

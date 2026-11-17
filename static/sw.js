@@ -1,12 +1,22 @@
 /* Service Worker: App laeuft offline, Netz wird nur genutzt wenn noetig.
-   Bei Aenderungen an HTML/CSS/JS die VERSION hochzaehlen. */
-const VERSION = "arrows-v8";
-const LEVELS = "arrows-levels-g4"; // hochzaehlen, wenn sich der Levelgenerator aendert
+   Die Versionen setzt der Server automatisch aus dem Inhalt der Dateien (app.py: BUILD, GEN).
+   Aendert sich etwas, ist diese Datei anders, der Browser installiert sie und alte Caches fliegen raus. */
+const BUILD = "__BUILD__";
+const VERSION = `arrows-${BUILD}`;
+const LEVELS = "arrows-levels-__GEN__"; // neue Level-Logik = neuer Cache
 const MAX_LEVELS = 60; // so viele Level bleiben auf dem Geraet
-const SHELL = ["/", "/static/app.js", "/static/style.css", "/static/icon.svg", "/manifest.webmanifest", "/icon-192.png"];
+const SHELL = [
+  "/", `/static/app.js?v=${BUILD}`, `/static/style.css?v=${BUILD}`,
+  "/static/icon.svg", "/manifest.webmanifest", "/icon-192.png",
+];
+const NAV_TIMEOUT = 3500; // so lange wartet die App beim Start aufs Netz, dann nimmt sie die gespeicherte
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(VERSION)
+      .then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: "no-cache" }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (e) => {
@@ -22,19 +32,24 @@ async function trimLevels(cache) {
   for (let i = 0; i < keys.length - MAX_LEVELS; i++) await cache.delete(keys[i]);
 }
 
+function timeout(ms) {
+  return new Promise((_, reject) => setTimeout(reject, ms));
+}
+
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
 
-  // Level sind fest (gleiche Nummer = gleiches Level): einmal holen, fuer immer behalten
+  // Level sind fest (gleiche Nummer = gleiches Level): einmal holen, fuer diese Generator-Version behalten
   if (url.pathname.startsWith("/api/level/")) {
+    const key = url.origin + url.pathname; // ohne ?g=, die Version steckt im Cache-Namen
     e.respondWith(
       caches.open(LEVELS).then(async (cache) => {
-        const hit = await cache.match(e.request);
+        const hit = await cache.match(key);
         if (hit) return hit;
-        const res = await fetch(e.request);
+        const res = await fetch(key, { cache: "no-cache" }); // nie ein altes Level aus dem Browser-Cache
         if (res.ok) {
-          await cache.put(e.request, res.clone());
+          await cache.put(key, res.clone());
           trimLevels(cache);
         }
         return res;
@@ -46,14 +61,33 @@ self.addEventListener("fetch", (e) => {
   // Konten und Statistik immer frisch vom Server
   if (url.pathname.startsWith("/api/") || url.pathname === "/dashboard" || url.pathname.endsWith("/dashboard")) return;
 
-  // /Simon usw.: gleiche App-Seite, auch offline
+  // Seite (/, /Simon usw.): erst kurz beim Server fragen (meist nur ein winziges 304), offline die gespeicherte.
+  // So kommt eine neue Version sofort an, und ist der Zero-Trust-Login abgelaufen, leitet Cloudflare
+  // ganz normal zur Anmeldung weiter statt eine alte Seite aus dem Cache zu zeigen.
   if (e.request.mode === "navigate") {
-    e.respondWith(caches.match("/").then((hit) => hit || fetch(e.request)));
+    e.respondWith((async () => {
+      try {
+        const res = await Promise.race([fetch(e.request), timeout(NAV_TIMEOUT)]);
+        if (res.ok && res.type === "basic" && (res.headers.get("Content-Type") || "").includes("text/html")) {
+          const copy = res.clone();
+          caches.open(VERSION).then((c) => c.put("/", copy));
+        }
+        return res;
+      } catch {
+        return (await caches.match("/")) || Response.error();
+      }
+    })());
     return;
   }
 
-  // App-Huelle: aus dem Cache, Netz nur als Rueckfall
+  // App-Dateien: aus dem Cache (die Adresse enthaelt die Version), Netz nur als Rueckfall
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request))
+    caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
+      if (res.ok && url.searchParams.get("v") === BUILD) {
+        const copy = res.clone();
+        caches.open(VERSION).then((c) => c.put(e.request, copy));
+      }
+      return res;
+    }))
   );
 });

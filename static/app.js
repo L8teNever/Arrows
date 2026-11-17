@@ -6,7 +6,8 @@ const SPEED = 22;           // Zellen pro Sekunde beim Rausfliegen
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const SVGNS = "http://www.w3.org/2000/svg";
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const GEN = 4; // Generator-Version, umgeht alte Level im Browser-Cache
+const GEN = document.documentElement.dataset.gen || "0"; // Generator-Version vom Server, umgeht alte Level
+let updateReady = false; // neue Version da, wird beim naechsten Levelwechsel eingespielt
 const levelUrl = (n) => `/api/level/${n}?g=${GEN}`;
 
 const $ = (id) => document.getElementById(id);
@@ -151,6 +152,7 @@ function transpose() {
 /* ---------- Level laden ---------- */
 async function loadLevel(n) {
   n = Math.max(1, Math.floor(n) || 1);
+  if (updateReady) { store.level = n; location.reload(); return; } // Update wartet: zwischen zwei Leveln einspielen
   let data;
   try {
     const res = await fetch(levelUrl(n));
@@ -526,9 +528,17 @@ async function accessLogin() {
       const u = await res.json();
       if (!u.access) { localStorage.removeItem("arrows.access"); return null; }
       localStorage.setItem("arrows.access", u.name);
+      sessionStorage.removeItem("arrows.relogin");
       return u;
     }
   } catch {}
+  // Online, aber keine Antwort: meist ist der Cloudflare-Login abgelaufen. Einmal neu laden,
+  // dann leitet Cloudflare zur Anmeldung weiter (kein Cache- oder Cookie-Loeschen noetig).
+  if (navigator.onLine && localStorage.getItem("arrows.access") && !sessionStorage.getItem("arrows.relogin")) {
+    sessionStorage.setItem("arrows.relogin", "1");
+    location.reload();
+    return new Promise(() => {});
+  }
   const last = localStorage.getItem("arrows.access");
   return last ? { name: last, offline: true } : null;
 }
@@ -570,13 +580,24 @@ start();
 
 if ("serviceWorker" in navigator)
 {
-  // Neue Version aktiv: einmal neu laden, damit sie sofort gilt (nicht erst beim uebernaechsten Start)
+  // Neue Version aktiv: einmal neu laden, damit sie sofort gilt. Direkt nach dem Start sofort,
+  // mitten im Spiel erst beim naechsten Level, damit kein Versuch verloren geht.
   const hadController = !!navigator.serviceWorker.controller;
   let reloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!hadController || reloaded) return;
-    reloaded = true;
-    location.reload();
+    if (performance.now() < 15000 || document.hidden) { reloaded = true; location.reload(); }
+    else updateReady = true;
   });
-  addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+  addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((reg) => {
+      // Kommt die App aus dem Hintergrund zurueck, kurz nach Updates schauen (hoechstens alle 30 Min, ein 304)
+      let checked = Date.now();
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden || Date.now() - checked < 30 * 60000) return;
+        checked = Date.now();
+        reg.update().catch(() => {});
+      });
+    }).catch(() => {});
+  });
 }
