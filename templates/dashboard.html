@@ -23,7 +23,7 @@
     </a>
     <div class="title">
       <span class="headline">Statistik</span>
-      {% if me %}<span class="sub">angemeldet als {{ me }}</span>{% endif %}
+      {% if me %}<span class="sub">angemeldet als {{ me }}{% if not detail or detail.name | lower != me | lower %} · <a href="{{ dash }}">meine Statistik</a>{% endif %}</span>{% endif %}
     </div>
     <span style="width:48px"></span>
   </header>
@@ -65,7 +65,7 @@
           <div><b>{{ '%.1f' % u.avg_mistakes if u.avg_mistakes is not none else '–' }}</b><span>Ø Fehler</span></div>
         </div>
         {% else %}
-        <p class="empty">Dieses Konto gibt es noch nicht. Öffne <a href="/{{ detail.name | urlencode }}">/{{ detail.name }}</a> zum Spielen.</p>
+        <p class="empty">Dieses Konto gibt es nicht. <a href="/dashboard?alle">Alle Spieler</a></p>
         {% endif %}
       </section>
       {% if u %}
@@ -111,7 +111,7 @@
         {% endfor %}
         </tbody>
       </table></div>
-      {% else %}<p class="empty">Noch niemand da. Spiel unter <b>/DeinName</b>, dann tauchst du hier auf.</p>{% endif %}
+      {% else %}<p class="empty">Noch niemand da. <a href="/">Spiel ein Level</a>, dann tauchst du hier auf.</p>{% endif %}
     </section>
 
     {% if recent %}
