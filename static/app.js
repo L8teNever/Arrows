@@ -146,12 +146,10 @@ function render() {
     const g = document.createElementNS(SVGNS, "g");
     g.setAttribute("class", "arrow");
     g.dataset.id = a.id;
-    for (const cls of ["hit", "body"]) {
-      const p = document.createElementNS(SVGNS, "polyline");
-      p.setAttribute("class", cls);
-      p.setAttribute("stroke-width", cls === "hit" ? C * 0.9 : C * 0.26);
-      g.appendChild(p);
-    }
+    const body = document.createElementNS(SVGNS, "polyline");
+    body.setAttribute("class", "body");
+    body.setAttribute("stroke-width", C * 0.26);
+    g.appendChild(body);
     const head = document.createElementNS(SVGNS, "polygon");
     head.setAttribute("class", "head");
     g.appendChild(head);
@@ -171,18 +169,39 @@ function drawArrow(a, pts, [dx, dy]) {
   const px = -dy, py = dx; // senkrecht
   const s = C * 0.3;
   const body = pts.map((p) => p.join(",")).join(" ");
-  a.el.children[0].setAttribute("points", body);
-  a.el.children[1].setAttribute("points", body);
-  a.el.children[2].setAttribute(
+  a.el.firstChild.setAttribute("points", body);
+  a.el.lastChild.setAttribute(
     "points",
     `${tip.join(",")} ${base[0] + px * s},${base[1] + py * s} ${base[0] - px * s},${base[1] - py * s}`
   );
 }
 
-board.addEventListener("click", (e) => {
-  const g = e.target.closest(".arrow");
-  if (g) tap(+g.dataset.id);
+/* Tippen: zaehlt schon beim Beruehren (nicht erst beim Loslassen) und wird ueber das Raster
+   aufgeloest statt ueber Trefferflaechen im DOM. Knapp daneben nimmt den naechsten Pfeil. */
+const pt = board.createSVGPoint();
+document.querySelector(".board-card").addEventListener("pointerdown", (e) => {
+  if (!state || state.over || !e.isPrimary || e.button > 0) return;
+  pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(board.getScreenCTM().inverse());
+  const id = arrowAt(p.x / C, p.y / C);
+  if (id >= 0) { e.preventDefault(); tap(id); }
 });
+
+/** Pfeil an Position (in Zellen); ist die Zelle leer, der naechste Pfeil im Umkreis von ~0.8 Zellen. */
+function arrowAt(fx, fy) {
+  const { grid, w, h } = state;
+  const cx = Math.floor(fx), cy = Math.floor(fy);
+  if (cx >= 0 && cy >= 0 && cx < w && cy < h && grid[cy * w + cx] >= 0) return grid[cy * w + cx];
+  let best = -1, bestD = 0.8 * 0.8;
+  for (let y = cy - 1; y <= cy + 1; y++)
+    for (let x = cx - 1; x <= cx + 1; x++) {
+      if (x < 0 || y < 0 || x >= w || y >= h || grid[y * w + x] < 0) continue;
+      const dx = Math.max(x - fx, 0, fx - (x + 1)), dy = Math.max(y - fy, 0, fy - (y + 1)); // Abstand zum Kaestchen
+      const d = dx * dx + dy * dy;
+      if (d < bestD) { bestD = d; best = grid[y * w + x]; }
+    }
+  return best;
+}
 
 function fitBoard() {
   if (!state) return;
