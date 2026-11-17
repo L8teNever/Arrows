@@ -6,7 +6,7 @@ const SPEED = 22;           // Zellen pro Sekunde beim Rausfliegen
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const SVGNS = "http://www.w3.org/2000/svg";
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const GEN = 3; // Generator-Version, umgeht alte Level im Browser-Cache
+const GEN = 4; // Generator-Version, umgeht alte Level im Browser-Cache
 const levelUrl = (n) => `/api/level/${n}?g=${GEN}`;
 
 const $ = (id) => document.getElementById(id);
@@ -380,4 +380,14 @@ applyTheme();
 loadLevel(store.level);
 
 if ("serviceWorker" in navigator)
+{
+  // Neue Version aktiv: einmal neu laden, damit sie sofort gilt (nicht erst beim uebernaechsten Start)
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
   addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}

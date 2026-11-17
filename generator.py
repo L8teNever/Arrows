@@ -73,14 +73,14 @@ def level_params(level: int) -> dict:
     Felder sind immer hochkant (hoeher als breit); quer drehen macht der Client.
     """
     n = max(1, level) - 1
-    width = min(5 + n // 4, 14)
-    height = min(6 + n // 3, 20)
-    max_len = min(3 + n // 6, 12)
+    width = min(6 + n // 2, 14)
+    height = min(8 + n * 3 // 4, 20)
+    max_len = min(4 + n // 3, 14)
     min_len = 2
     big = is_big(level)
     if big:
-        width = min(width + 5, 18)
-        height = min(height + 8, 28)
+        width = min(width + 5, 19)
+        height = min(height + 9, 30)
         max_len = min(max(max_len * 3, 16), 36)
         min_len = max_len // 3
     shape = shape_of(level)
