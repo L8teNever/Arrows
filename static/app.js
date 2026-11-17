@@ -6,7 +6,8 @@ const SPEED = 22;           // Zellen pro Sekunde beim Rausfliegen
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const SVGNS = "http://www.w3.org/2000/svg";
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const levelUrl = (n) => `/api/level/${n}`;
+const GEN = 2; // Generator-Version, umgeht alte Level im Browser-Cache
+const levelUrl = (n) => `/api/level/${n}?g=${GEN}`;
 
 const $ = (id) => document.getElementById(id);
 const board = $("board");
@@ -50,6 +51,26 @@ function snackbar(text) {
 function vibrate(ms) { navigator.vibrate?.(ms); }
 const center = ([x, y]) => [(x + 0.5) * C, (y + 0.5) * C];
 
+/* ---------- Ausrichtung ---------- */
+// Level kommen hochkant vom Server. Quer (Tablet, Handy gedreht) wird gespiegelt:
+// x und y tauschen, Richtungen mit. Bleibt genauso loesbar.
+const FLIP = { up: "left", left: "up", down: "right", right: "down" };
+const wantWide = () => {
+  const wrap = document.querySelector(".board-wrap");
+  return wrap.clientWidth > wrap.clientHeight * 1.05;
+};
+
+function transpose() {
+  [state.w, state.h] = [state.h, state.w];
+  state.wide = !state.wide;
+  state.grid = new Int32Array(state.w * state.h).fill(-1);
+  for (const a of state.arrows.values()) {
+    a.cells = a.cells.map(([x, y]) => [y, x]);
+    a.dir = FLIP[a.dir];
+    if (!a.removed) for (const [x, y] of a.cells) state.grid[y * state.w + x] = a.id;
+  }
+}
+
 /* ---------- Level laden ---------- */
 async function loadLevel(n) {
   n = Math.max(1, Math.floor(n) || 1);
@@ -74,10 +95,15 @@ async function loadLevel(n) {
     mistakes: 0,
     started: performance.now(),
     over: false,
+    wide: false,
+    big: !!data.big,
   };
   $("level-no").textContent = n;
-  $("level-info").textContent = `${data.width} × ${data.height} · ${data.arrows.length} Pfeile`;
   for (const a of state.arrows.values()) for (const [x, y] of a.cells) state.grid[y * data.width + x] = a.id;
+  if (wantWide()) transpose();
+  $("level-info").textContent = `${state.w} × ${state.h} · ${data.arrows.length} Pfeile`;
+  $("big-chip").hidden = !state.big;
+  if (state.big) snackbar("Großes Feld – lange Pfeile!");
   render();
   prefetch(n + 1);
 }
@@ -101,6 +127,7 @@ function render() {
   const frag = document.createDocumentFragment();
 
   for (const a of state.arrows.values()) {
+    if (a.removed) continue;
     const g = document.createElementNS(SVGNS, "g");
     g.setAttribute("class", "arrow");
     g.dataset.id = a.id;
@@ -145,8 +172,12 @@ board.addEventListener("click", (e) => {
 function fitBoard() {
   if (!state) return;
   const wrap = document.querySelector(".board-wrap");
-  const availW = wrap.clientWidth - 32 - 32;
-  const availH = wrap.clientHeight - 32;
+  const card = wrap.firstElementChild;
+  const ws = getComputedStyle(wrap), cs = getComputedStyle(card);
+  const padW = parseFloat(ws.paddingLeft) * 2 + parseFloat(cs.paddingLeft) * 2;
+  const padH = parseFloat(cs.paddingTop) * 2;
+  const availW = wrap.clientWidth - padW;
+  const availH = wrap.clientHeight - padH;
   const ratio = (state.w + 0.2) / (state.h + 0.2);
   let width = availW, height = availW / ratio;
   if (height > availH) { height = availH; width = availH * ratio; }
@@ -157,7 +188,16 @@ let fitQueued = false;
 addEventListener("resize", () => {
   if (fitQueued) return;
   fitQueued = true;
-  requestAnimationFrame(() => { fitQueued = false; fitBoard(); });
+  requestAnimationFrame(() => {
+    fitQueued = false;
+    if (!state) return;
+    const busy = [...state.arrows.values()].some((a) => a.busy || (a.removed && a.el?.isConnected));
+    if (!busy && wantWide() !== state.wide) {
+      transpose();
+      $("level-info").textContent = `${state.w} × ${state.h} · ${state.arrows.size} Pfeile`;
+      render();
+    } else fitBoard();
+  });
 });
 
 function updateHud() {

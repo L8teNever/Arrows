@@ -98,6 +98,9 @@ body {
   font-size: 14px; font-weight: 500;
 }
 .chip .ic { width: 18px; height: 18px; }
+.chips { display: flex; gap: 8px; }
+.chip.big { background: var(--primary-container); color: var(--on-primary-container); }
+.chip[hidden] { display: none; }
 
 /* Board */
 .board-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 0 16px; min-height: 0; }
@@ -178,4 +181,16 @@ dialog p { margin: 0 0 16px; color: var(--on-surface-variant); font-size: 14px; 
 /* Sparsam: keine Dauer-Animationen, bei Wunsch nach weniger Bewegung alles kurz */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* Tablet / quer: Feld bekommt die Breite, Leisten werden schmaler */
+@media (orientation: landscape) and (max-height: 600px) {
+  .top-app-bar { height: 48px; }
+  .status { padding: 0 20px 4px; }
+  .actions { padding: 8px 16px 12px; }
+  .board-card { padding: 8px; border-radius: var(--shape-l); }
+}
+@media (min-width: 900px) {
+  .board-wrap { padding: 0 32px; }
+  .top-app-bar, .status, .actions { max-width: 1200px; width: 100%; margin: 0 auto; }
 }

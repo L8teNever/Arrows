@@ -22,13 +22,30 @@ DIRS = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 STEPS = list(DIRS.values())
 
 
+def is_big(level: int) -> bool:
+    """Ab und zu ein grosses Feld mit langen Pfeilen: ab Level 6 grob jedes 5.-9. Level."""
+    if level < 6:
+        return False
+    return random.Random(f"arrows-big-{level // 7}").randrange(7) == level % 7
+
+
 def level_params(level: int) -> dict:
-    """Groesse und Schwierigkeit steigen mit dem Level, bis zu einer Obergrenze."""
+    """Groesse und Schwierigkeit steigen mit dem Level, bis zu einer Obergrenze.
+
+    Felder sind immer hochkant (hoeher als breit); quer drehen macht der Client.
+    """
     n = max(1, level) - 1
     width = min(5 + n // 4, 14)
     height = min(6 + n // 3, 20)
     max_len = min(3 + n // 6, 12)
-    return {"width": width, "height": height, "max_len": max_len}
+    min_len = 2
+    big = is_big(level)
+    if big:
+        width = min(width + 5, 18)
+        height = min(height + 8, 28)
+        max_len = min(max(max_len * 3, 16), 36)
+        min_len = max_len // 3
+    return {"width": width, "height": height, "max_len": max_len, "min_len": min_len, "big": big}
 
 
 def _direction(a, b) -> str:
@@ -86,14 +103,14 @@ def _head_ray(path, width, height) -> set:
     return set(_ray(head, step, width, height))
 
 
-def _try_insert(walk, order, rays, width, height):
+def _try_insert(walk, order, rays, width, height, min_k=2):
     """Versucht den laengsten Anfang von walk in die Entfernungs-Reihenfolge einzufuegen.
 
     order: Pfade in Entfernungs-Reihenfolge, rays: deren Bahn zum Rand.
     Ein neuer Pfeil muss nach allen Pfeilen entfernt werden, deren Bahn er
     kreuzt, und vor allen Pfeilen, die auf seiner eigenen Bahn liegen.
     """
-    for k in range(len(walk), 1, -1):
+    for k in range(len(walk), min_k - 1, -1):
         path = walk[:k]
         cells = set(path)
         ray = _head_ray(path, width, height)
@@ -116,22 +133,24 @@ def _try_insert(walk, order, rays, width, height):
 
 def generate_level(level: int) -> dict:
     p = level_params(level)
-    width, height, max_len = p["width"], p["height"], p["max_len"]
+    width, height, max_len, min_len = p["width"], p["height"], p["max_len"], p["min_len"]
     rng = random.Random(f"arrows-{level}")
 
     occupied: set = set()
     order: list[list] = []
     rays: list[set] = []
 
-    for _ in range(4):
+    for rnd in range(6 if p["big"] else 4):
+        # grosse Felder: erst nur lange Pfeile, danach Luecken mit kurzen fuellen
+        need = max(2, min_len - rnd * (min_len // 3)) if p["big"] else 2
         free = [(x, y) for y in range(height) for x in range(width) if (x, y) not in occupied]
         rng.shuffle(free)
         for start in free:
             if start in occupied:
                 continue
             for _ in range(5):
-                walk = _random_walk(rng, start, occupied, width, height, rng.randint(2, max_len))
-                placed = _try_insert(walk, order, rays, width, height) if len(walk) >= 2 else None
+                walk = _random_walk(rng, start, occupied, width, height, rng.randint(need, max_len))
+                placed = _try_insert(walk, order, rays, width, height, need) if len(walk) >= need else None
                 if placed:
                     occupied.update(placed)
                     break
@@ -143,6 +162,7 @@ def generate_level(level: int) -> dict:
         "level": level,
         "width": width,
         "height": height,
+        "big": p["big"],
         "arrows": [
             {
                 "id": i,

@@ -1,7 +1,7 @@
 /* Service Worker: App laeuft offline, Netz wird nur genutzt wenn noetig.
    Bei Aenderungen an HTML/CSS/JS die VERSION hochzaehlen. */
-const VERSION = "arrows-v1";
-const LEVELS = "arrows-levels";
+const VERSION = "arrows-v2";
+const LEVELS = "arrows-levels-g2"; // hochzaehlen, wenn sich der Levelgenerator aendert
 const MAX_LEVELS = 60; // so viele Level bleiben auf dem Geraet
 const SHELL = ["/", "/static/app.js", "/static/style.css", "/static/icon.svg", "/manifest.webmanifest", "/icon-192.png"];
 
