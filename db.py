@@ -50,6 +50,33 @@ def connect() -> sqlite3.Connection:
 def init() -> None:
     with connect() as con:
         con.executescript(SCHEMA)
+        cols = {r["name"] for r in con.execute("PRAGMA table_info(users)")}
+        if "email" not in cols:  # Login ueber Cloudflare Zero Trust
+            con.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email ON users(email COLLATE NOCASE)")
+
+
+def name_from_email(email: str) -> str:
+    """simon.k@gmail.com -> simon.k ist kein gueltiger Name, daher: simon-k (max. 24 Zeichen)."""
+    local = email.split("@", 1)[0]
+    name = re.sub(r"[^A-Za-z0-9ÄÖÜäöüß_-]+", "-", local).strip("-_")[:24] or "Spieler"
+    return name if valid_name(name) else f"{name[:20]}-1"
+
+
+def get_or_create_by_email(con, email: str) -> sqlite3.Row:
+    """Konto zur Zero-Trust-Mail; beim ersten Login wird der Teil vor dem @ zum Namen."""
+    email = email.strip().lower()
+    row = con.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    if row:
+        return row
+    base = name_from_email(email)
+    name, i = base, 2
+    while con.execute("SELECT 1 FROM users WHERE name = ?", (name,)).fetchone():
+        suffix = f"-{i}"
+        name, i = base[: 24 - len(suffix)] + suffix, i + 1
+    t = now()
+    con.execute("INSERT INTO users (name, email, created, last_seen) VALUES (?, ?, ?, ?)", (name, email, t, t))
+    return con.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
 
 
 def now() -> int:

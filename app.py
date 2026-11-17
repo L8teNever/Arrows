@@ -1,4 +1,5 @@
 import gzip
+import os
 from functools import lru_cache
 from urllib.parse import quote
 
@@ -14,6 +15,41 @@ app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.jinja_env.filters["dauer"] = stats.fmt_ms
 app.jinja_env.filters["tempo"] = stats.fmt_speed
 db.init()
+
+
+# ---------- Login ueber Cloudflare Zero Trust ----------
+# Liegt die Seite hinter Cloudflare Access, setzt Cloudflare die Mail des Angemeldeten in einen Header.
+# Daraus wird automatisch das Konto. Mit ARROWS_ACCESS_TEAM (z. B. "kulbarts") und ARROWS_ACCESS_AUD
+# (Application Audience Tag) wird zusaetzlich das signierte Token geprueft, damit niemand den Header faelschen kann.
+ACCESS_TEAM = os.environ.get("ARROWS_ACCESS_TEAM", "").strip()
+ACCESS_AUD = os.environ.get("ARROWS_ACCESS_AUD", "").strip()
+_jwks = None
+
+
+def access_email() -> str | None:
+    if ACCESS_TEAM and ACCESS_AUD:
+        token = request.headers.get("Cf-Access-Jwt-Assertion") or request.cookies.get("CF_Authorization")
+        if not token:
+            return None
+        global _jwks
+        import jwt  # nur noetig, wenn die Pruefung eingeschaltet ist
+
+        if _jwks is None:
+            _jwks = jwt.PyJWKClient(f"https://{ACCESS_TEAM}.cloudflareaccess.com/cdn-cgi/access/certs", cache_keys=True)
+        try:
+            key = _jwks.get_signing_key_from_jwt(token).key
+            claims = jwt.decode(token, key, algorithms=["RS256"], audience=ACCESS_AUD)
+        except Exception:
+            return None
+        email = claims.get("email")
+    else:
+        email = request.headers.get("Cf-Access-Authenticated-User-Email")
+    return email.strip().lower() if email and "@" in email else None
+
+
+def access_user(con):
+    email = access_email()
+    return db.get_or_create_by_email(con, email) if email else None
 
 
 @lru_cache(maxsize=512)
@@ -35,8 +71,24 @@ def player(name: str):
 
 
 def _need_name(name: str):
+    """Mit Zero-Trust-Login darf man nur das eigene Konto benutzen."""
     if not db.valid_name(name):
         abort(400, "Ungueltiger Name")
+    email = access_email()
+    if email:
+        with db.connect() as con:
+            if db.get_or_create_by_email(con, email)["name"].lower() != name.lower():
+                abort(403, "Das ist nicht dein Konto")
+
+
+@app.get("/api/me")
+def me():
+    """Wer ist ueber Zero Trust angemeldet? Ohne Login: access=false, das Spiel nutzt dann /Name."""
+    with db.connect() as con:
+        u = access_user(con)
+        resp = jsonify({**db.user_json(u), "access": True} if u else {"access": False})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 def _int(body: dict, key: str, default=None, lo=0, hi=10**9):
@@ -89,8 +141,8 @@ COOKIE = "arrows_player"  # setzt das Spiel, sobald man /Name geoeffnet hat
 @app.get("/dashboard")
 def dashboard_root():
     """Eingeloggt (vorher /Name geoeffnet): direkt zur eigenen Statistik, sonst Uebersicht."""
-    me = request.cookies.get(COOKIE, "")
-    if db.valid_name(me) and "alle" not in request.args:
+    me = _me_name()
+    if me and "alle" not in request.args:
         return redirect(f"/{quote(me)}/dashboard" + (f"?{request.query_string.decode()}" if request.query_string else ""))
     return _dashboard(None)
 
@@ -102,8 +154,18 @@ def dashboard_user(name: str):
     return _dashboard(name)
 
 
-def _dashboard(name: str | None):
+def _me_name() -> str:
+    """Eigenes Konto: ueber Zero Trust, sonst das Cookie vom letzten /Name."""
+    with db.connect() as con:
+        u = access_user(con)
+    if u:
+        return u["name"]
     me = request.cookies.get(COOKIE, "")
+    return me if db.valid_name(me) else ""
+
+
+def _dashboard(name: str | None):
+    me = _me_name()
     with db.connect() as con:
         data = stats.collect(con)
         detail = None
@@ -124,7 +186,7 @@ def _dashboard(name: str | None):
     base = f"/{quote(detail['user']['name'] if detail and detail['user'] else name)}/dashboard" if name else "/dashboard"
     resp = Response(render_template(
         "dashboard.html", data=data, detail=detail, ranking=ranking, recent=data["levels"][:30],
-        base=base, me=me if db.valid_name(me) else "",
+        base=base, me=me,
     ))
     resp.headers["Cache-Control"] = "no-store"
     return resp

@@ -517,8 +517,31 @@ function rememberLogin() {
   document.cookie = `arrows_player=${encodeURIComponent(player)}; path=/; max-age=31536000; SameSite=Lax`;
 }
 
+// Zero Trust: Cloudflare kennt die Mail, der Server macht daraus das Konto. Offline gilt das letzte bekannte.
+async function accessLogin() {
+  try {
+    const res = await fetch("/api/me", { cache: "no-store" });
+    const ct = res.headers.get("Content-Type") || "";
+    if (res.ok && ct.includes("json")) {
+      const u = await res.json();
+      if (!u.access) { localStorage.removeItem("arrows.access"); return null; }
+      localStorage.setItem("arrows.access", u.name);
+      return u;
+    }
+  } catch {}
+  const last = localStorage.getItem("arrows.access");
+  return last ? { name: last, offline: true } : null;
+}
+
 async function start() {
   applyTheme();
+  const acc = await accessLogin();
+  if (acc) {
+    player = acc.name;
+    history.replaceState(null, "", "/" + encodeURIComponent(player));
+    $("switch-player").style.display = "none"; // Konto haengt an der Mail
+    if ($("dlg-name").open) $("dlg-name").close();
+  }
   if (!player) {
     if (!localStorage.getItem("arrows.guest")) askName();
     loadLevel(store.level);
@@ -529,9 +552,9 @@ async function start() {
   document.title = `Arrows – ${player}`;
   let level = store.level;
   try {
-    const res = await fetch(api(""));
-    if (res.ok) {
-      const u = await res.json();
+    const res = acc && !acc.offline ? null : await fetch(api(""));
+    if (!res || res.ok) {
+      const u = res ? await res.json() : acc;
       player = u.name; // Schreibweise wie beim Anlegen
       rememberLogin();
       serverLevel = u.level;
