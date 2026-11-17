@@ -83,12 +83,7 @@ def now() -> int:
     return int(time.time())
 
 
-def get_or_create(con, name: str) -> sqlite3.Row:
-    row = con.execute("SELECT * FROM users WHERE name = ?", (name,)).fetchone()
-    if row:
-        return row
-    t = now()
-    con.execute("INSERT INTO users (name, created, last_seen) VALUES (?, ?, ?)", (name, t, t))
+def get_user(con, name: str) -> sqlite3.Row:
     return con.execute("SELECT * FROM users WHERE name = ?", (name,)).fetchone()
 
 
@@ -97,7 +92,7 @@ def user_json(row) -> dict:
 
 
 def progress(con, name: str, level: int | None, play_ms: int) -> sqlite3.Row:
-    u = get_or_create(con, name)
+    u = get_user(con, name)
     lvl = u["level"] if level is None else max(1, min(level, u["max_level"]))
     con.execute(
         "UPDATE users SET level = ?, play_ms = play_ms + ?, last_seen = ? WHERE id = ?",
@@ -107,7 +102,7 @@ def progress(con, name: str, level: int | None, play_ms: int) -> sqlite3.Row:
 
 
 def add_result(con, name: str, level: int, ms: int, mistakes: int, play_ms: int) -> sqlite3.Row:
-    u = get_or_create(con, name)
+    u = get_user(con, name)
     if level > u["max_level"]:
         raise ValueError("Level noch nicht freigeschaltet")
     con.execute(

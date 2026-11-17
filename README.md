@@ -14,12 +14,10 @@ Das Image baut GitHub Actions bei jedem Push auf `main` nach `ghcr.io/l8tenever/
 
 ## Konten und Statistik
 
-- `/Simon` spielt mit Simons Konto, ein neuer Name (z. B. `/Lena`) legt beim ersten Aufruf ein Konto an. Der Fortschritt liegt auf dem Server, man spielt auf jedem Gerät weiter.
-- `/` fragt nach dem Namen (oder Gast, nur lokal). Die installierte App merkt sich das letzte Konto.
-- `/Name/dashboard` zeigt die eigene Statistik (Level, Spielzeit, Ø pro Level, Tempo im Vergleich, Fehler, alle Level) und darunter den Vergleich mit allen. `?level=12` zeigt die Rangliste eines Levels.
-- `/dashboard` führt nach dem Öffnen von `/Name` (Cookie) direkt zur eigenen Statistik, sonst zur Übersicht; `/dashboard?alle` zeigt immer die Übersicht.
+- Angemeldet wird nur über Cloudflare Zero Trust (siehe unten). Das Konto kommt aus der Mail, einen Namen tippt niemand ein. Frühere Links wie `/Simon` leiten auf `/` um.
+- Der Fortschritt liegt auf dem Server, man spielt auf jedem Gerät weiter.
+- `/dashboard` führt zur eigenen Statistik (Level, Spielzeit, Ø pro Level, Tempo im Vergleich, Fehler, alle Level), darunter der Vergleich mit allen. `/Name/dashboard` zeigt die Statistik eines anderen Spielers, `/dashboard?alle` die Übersicht, `?level=12` die Rangliste eines Levels.
 - Gezählt wird nur aktive Spielzeit (App sichtbar). Daten in SQLite unter `/data/arrows.db` (Docker-Volume).
-- Kein Passwort: wer den Namen kennt, kann mit dem Konto spielen.
 
 ## Sparsam am Handy
 
@@ -40,8 +38,8 @@ Das Image baut GitHub Actions bei jedem Push auf `main` nach `ghcr.io/l8tenever/
 
 Liegt die Seite hinter einer Cloudflare-Access-Application, liest der Server die Mail aus
 `Cf-Access-Authenticated-User-Email` und legt daraus automatisch das Konto an (Name = Teil vor dem @,
-z. B. `l8tenever@gmail.com` → `l8tenever`). Man spielt dann immer mit dem eigenen Konto, `/Name` und
-„Konto wechseln“ entfallen. Ohne Access gilt weiter `/Name`.
+z. B. `l8tenever@gmail.com` → `l8tenever`). Ohne Login spielt man nur lokal auf dem Gerät, ohne Konto und Statistik.
+Lokal testen: `ARROWS_DEV_EMAIL=ich@example.com` setzt eine feste Mail.
 
 Optional prüft der Server zusätzlich das signierte Access-Token, damit der Header nicht gefälscht werden kann:
 

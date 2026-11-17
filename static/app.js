@@ -15,17 +15,10 @@ const board = $("board");
 
 /* ---------- Konto ---------- */
 // /Simon = Simons Konto (wird beim ersten Mal angelegt). Ohne Namen: als Gast, nur auf diesem Geraet.
-const NAME_RE = /^[A-Za-z0-9ÄÖÜäöüß_-]{1,24}$/;
-const RESERVED = ["api", "static", "dashboard", "healthz", "sw", "manifest", "icon"];
-const validName = (n) => NAME_RE.test(n) && !RESERVED.includes(n.toLowerCase());
-let player = (() => {
-  let n = "";
-  try { n = decodeURIComponent(location.pathname.slice(1)); } catch {}
-  if (validName(n)) return n;
-  const last = localStorage.getItem("arrows.player"); // App vom Startbildschirm startet auf "/"
-  if (last && validName(last)) { history.replaceState(null, "", "/" + encodeURIComponent(last)); return last; }
-  return null;
-})();
+// Konto kommt nur aus dem Zero-Trust-Login (Mail), siehe accessLogin()
+["arrows.player", "arrows.guest"].forEach((k) => localStorage.removeItem(k)); // Reste vom alten /Name-Login
+document.cookie = "arrows_player=; path=/; max-age=0";
+let player = null;
 const key = (k) => (player ? `arrows.u.${player.toLowerCase()}.${k}` : `arrows.${k}`);
 
 const store = {
@@ -70,7 +63,7 @@ const center = ([x, y]) => [(x + 0.5) * C, (y + 0.5) * C];
 /* ---------- Server-Abgleich (sparsam) ----------
    Gesendet wird nur: ein Ergebnis beim Schaffen eines Levels, das Level beim Wechseln und die
    Spielzeit beim Verlassen der App. Ohne Netz bleiben Ergebnisse im Postausgang und gehen spaeter raus. */
-const api = (path) => `/api/u/${encodeURIComponent(player)}${path}`;
+const api = (path) => `/api/me${path}`;
 let serverLevel = null;  // Level, das der Server kennt (spart doppelte Meldungen)
 let playUnsent = +localStorage.getItem(key("playUnsent")) || 0; // Spielzeit seit der letzten Meldung (ms)
 
@@ -90,7 +83,7 @@ async function flushOutbox() {
       try {
         res = await fetch(job.url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(job.body), keepalive: true });
       } catch { break; } // kein Netz: spaeter nochmal
-      if (res.status >= 500) break;
+      if (res.status >= 500 || res.status === 401 || res.status === 403) break; // Server weg oder Login abgelaufen: spaeter nochmal
       box = outbox.get().slice(1); // 2xx oder 4xx (ungueltig): raus aus dem Postausgang
       outbox.set(box);
     }
@@ -477,7 +470,7 @@ $("lose-retry").onclick = () => { $("dlg-lose").close(); loadLevel(state.level);
 
 function openLevels() {
   $("stats-link").href = player ? `/${encodeURIComponent(player)}/dashboard` : "/dashboard";
-  $("player-line").textContent = player ? `Konto: ${player}` : "Als Gast (nur auf diesem Gerät)";
+  $("player-line").textContent = player ? `Konto: ${player}` : "Nicht angemeldet (nur auf diesem Gerät)";
   $("max-level").textContent = store.max;
   $("level-input").max = store.max;
   $("level-input").value = state?.level || 1;
@@ -493,31 +486,6 @@ $("levels-go").onclick = () => {
   loadLevel(n);
 };
 $("level-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("levels-go").click(); });
-
-/* ---------- Name waehlen (nur auf "/" ohne gespeicherten Namen) ---------- */
-function askName() {
-  $("dlg-name").showModal();
-  $("name-input").focus();
-}
-$("name-go").onclick = () => {
-  const n = $("name-input").value.trim();
-  if (!validName(n)) { snackbar("Nur Buchstaben, Zahlen, - und _ (max. 24)"); return; }
-  $("dlg-name").close();
-  location.href = "/" + encodeURIComponent(n);
-};
-$("name-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("name-go").click(); });
-$("name-guest").onclick = () => { $("dlg-name").close(); localStorage.setItem("arrows.guest", "1"); };
-$("switch-player").onclick = () => {
-  localStorage.removeItem("arrows.player");
-  localStorage.removeItem("arrows.guest");
-  document.cookie = "arrows_player=; path=/; max-age=0";
-  location.href = "/";
-};
-
-// Cookie, damit /dashboard direkt zur eigenen Statistik fuehrt (1 Jahr)
-function rememberLogin() {
-  document.cookie = `arrows_player=${encodeURIComponent(player)}; path=/; max-age=31536000; SameSite=Lax`;
-}
 
 // Zero Trust: Cloudflare kennt die Mail, der Server macht daraus das Konto. Offline gilt das letzte bekannte.
 async function accessLogin() {
@@ -545,34 +513,19 @@ async function accessLogin() {
 
 async function start() {
   applyTheme();
+  if (location.pathname !== "/") history.replaceState(null, "", "/");
   const acc = await accessLogin();
-  if (acc) {
-    player = acc.name;
-    history.replaceState(null, "", "/" + encodeURIComponent(player));
-    $("switch-player").style.display = "none"; // Konto haengt an der Mail
-    if ($("dlg-name").open) $("dlg-name").close();
-  }
-  if (!player) {
-    if (!localStorage.getItem("arrows.guest")) askName();
-    loadLevel(store.level);
-    return;
-  }
-  localStorage.setItem("arrows.player", player);
-  rememberLogin();
+  if (!acc) { loadLevel(store.level); return; } // ohne Login (nur lokal): Fortschritt bleibt auf dem Geraet
+  player = acc.name;
+  playUnsent = +localStorage.getItem(key("playUnsent")) || 0;
   document.title = `Arrows – ${player}`;
   let level = store.level;
-  try {
-    const res = acc && !acc.offline ? null : await fetch(api(""));
-    if (!res || res.ok) {
-      const u = res ? await res.json() : acc;
-      player = u.name; // Schreibweise wie beim Anlegen
-      rememberLogin();
-      serverLevel = u.level;
-      // Server gilt, ausser dieses Geraet ist weiter (Ergebnisse noch im Postausgang)
-      if (store.max <= u.max) level = u.level;
-      store.max = u.max;
-    }
-  } catch {}
+  if (!acc.offline) {
+    serverLevel = acc.level;
+    // Server gilt, ausser dieses Geraet ist weiter (Ergebnisse noch im Postausgang)
+    if (store.max <= acc.max) level = acc.level;
+    store.max = acc.max;
+  }
   loadLevel(level);
   flushOutbox();
 }

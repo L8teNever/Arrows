@@ -44,7 +44,8 @@ def access_email() -> str | None:
             return None
         email = claims.get("email")
     else:
-        email = request.headers.get("Cf-Access-Authenticated-User-Email")
+        # ARROWS_DEV_EMAIL nur lokal zum Testen ohne Cloudflare
+        email = request.headers.get("Cf-Access-Authenticated-User-Email") or os.environ.get("ARROWS_DEV_EMAIL")
     return email.strip().lower() if email and "@" in email else None
 
 
@@ -104,22 +105,19 @@ def index():
 
 
 @app.get("/<name>")
-def player(name: str):
-    """/Simon spielt mit Simons Konto, ein neuer Name legt beim ersten Laden ein Konto an."""
+def old_name_link(name: str):
+    """Fruehere Links wie /Simon: das Konto kommt jetzt aus dem Zero-Trust-Login."""
     if not db.valid_name(name):
         abort(404)
-    return _cached_text(INDEX_HTML, "text/html", BUILD)
+    return redirect("/")
 
 
-def _need_name(name: str):
-    """Mit Zero-Trust-Login darf man nur das eigene Konto benutzen."""
-    if not db.valid_name(name):
-        abort(400, "Ungueltiger Name")
-    email = access_email()
-    if email:
-        with db.connect() as con:
-            if db.get_or_create_by_email(con, email)["name"].lower() != name.lower():
-                abort(403, "Das ist nicht dein Konto")
+def _require_user(con):
+    """Nur mit Zero-Trust-Login: das Konto gehoert zur Mail."""
+    u = access_user(con)
+    if not u:
+        abort(401, "Nicht angemeldet")
+    return u
 
 
 @app.get("/api/me")
@@ -142,33 +140,26 @@ def _int(body: dict, key: str, default=None, lo=0, hi=10**9):
     return max(lo, min(v, hi))
 
 
-@app.get("/api/u/<name>")
-def user_get(name: str):
-    _need_name(name)
-    with db.connect() as con:
-        return jsonify(db.user_json(db.get_or_create(con, name)))
-
-
-@app.post("/api/u/<name>/progress")
-def user_progress(name: str):
+@app.post("/api/me/progress")
+def user_progress():
     """Aktuelles Level + Spielzeit seit der letzten Meldung (auch per sendBeacon)."""
-    _need_name(name)
     body = request.get_json(force=True, silent=True) or {}
     level = body.get("level")
     with db.connect() as con:
+        name = _require_user(con)["name"]
         u = db.progress(con, name, _int(body, "level", 1, 1, MAX_LEVEL) if level is not None else None, _int(body, "playMs", 0))
         return jsonify(db.user_json(u))
 
 
-@app.post("/api/u/<name>/result")
-def user_result(name: str):
-    _need_name(name)
+@app.post("/api/me/result")
+def user_result():
     body = request.get_json(force=True, silent=True) or {}
     level = _int(body, "level", None, 1, MAX_LEVEL)
     ms = _int(body, "ms", None, 0, 24 * 3600_000)
     if ms < 300:
         abort(400, "Zu schnell")
     with db.connect() as con:
+        name = _require_user(con)["name"]
         try:
             u = db.add_result(con, name, level, ms, _int(body, "mistakes", 0, 0, 99), _int(body, "playMs", 0))
         except ValueError as e:
@@ -176,12 +167,9 @@ def user_result(name: str):
         return jsonify(db.user_json(u))
 
 
-COOKIE = "arrows_player"  # setzt das Spiel, sobald man /Name geoeffnet hat
-
-
 @app.get("/dashboard")
 def dashboard_root():
-    """Eingeloggt (vorher /Name geoeffnet): direkt zur eigenen Statistik, sonst Uebersicht."""
+    """Angemeldet: direkt zur eigenen Statistik, mit ?alle die Uebersicht."""
     me = _me_name()
     if me and "alle" not in request.args:
         return redirect(f"/{quote(me)}/dashboard" + (f"?{request.query_string.decode()}" if request.query_string else ""))
@@ -196,13 +184,10 @@ def dashboard_user(name: str):
 
 
 def _me_name() -> str:
-    """Eigenes Konto: ueber Zero Trust, sonst das Cookie vom letzten /Name."""
+    """Eigenes Konto aus dem Zero-Trust-Login."""
     with db.connect() as con:
         u = access_user(con)
-    if u:
-        return u["name"]
-    me = request.cookies.get(COOKIE, "")
-    return me if db.valid_name(me) else ""
+    return u["name"] if u else ""
 
 
 def _dashboard(name: str | None):
