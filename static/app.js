@@ -112,8 +112,8 @@ function reportProgress(beacon) {
 
 /* ---------- Spielzeit: laeuft nur, solange die App sichtbar ist ---------- */
 let segStart = null;
-// Nach 10 s ohne Eingabe geht das Spiel in die Pause. Ein einziger Timer, der bei jeder Eingabe neu startet.
-const IDLE_MS = 10000;
+// Nach 30 s ohne Eingabe geht das Spiel in die Pause. Ein einziger Timer, der bei jeder Eingabe neu startet.
+const IDLE_MS = 30000;
 let idleTimer = 0;
 function idleArm() {
   clearTimeout(idleTimer);
@@ -609,7 +609,7 @@ function fmtTime(ms) {
 function openPause(auto = false) {
   clockStop();
   $("dlg-pause").showModal(); // erst oeffnen, dann zaehlt clockStart() nicht weiter
-  const parts = auto === true ? ["Pausiert, weil 10 Sekunden nichts passiert ist."] : [];
+  const parts = auto === true ? ["Pausiert, weil 30 Sekunden nichts passiert ist."] : [];
   if (player) parts.push(`Konto: ${player}`);
   if (state) parts.push(`Level ${state.level} · ${fmtTime(state.activeMs)} gespielt`);
   $("pause-info").textContent = parts.join(" · ");
