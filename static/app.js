@@ -112,10 +112,25 @@ function reportProgress(beacon) {
 
 /* ---------- Spielzeit: laeuft nur, solange die App sichtbar ist ---------- */
 let segStart = null;
+// Nach 10 s ohne Eingabe geht das Spiel in die Pause. Ein einziger Timer, der bei jeder Eingabe neu startet.
+const IDLE_MS = 10000;
+let idleTimer = 0;
+function idleArm() {
+  clearTimeout(idleTimer);
+  if (segStart !== null) idleTimer = setTimeout(() => {
+    if (segStart !== null && !document.querySelector("dialog[open]")) openPause(true);
+  }, IDLE_MS);
+}
+addEventListener("pointerdown", idleArm, { passive: true });
+addEventListener("keydown", idleArm);
 function clockStart() {
-  if (state && !state.over && segStart === null && document.visibilityState === "visible" && !$("dlg-pause").open) segStart = performance.now();
+  if (state && !state.over && segStart === null && document.visibilityState === "visible" && !$("dlg-pause").open) {
+    segStart = performance.now();
+    idleArm();
+  }
 }
 function clockStop() {
+  clearTimeout(idleTimer);
   if (segStart === null || !state) return;
   const d = performance.now() - segStart;
   segStart = null;
@@ -478,10 +493,10 @@ function fmtTime(ms) {
   const s = Math.floor(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
-function openPause() {
+function openPause(auto = false) {
   clockStop();
   $("dlg-pause").showModal(); // erst oeffnen, dann zaehlt clockStart() nicht weiter
-  const parts = [];
+  const parts = auto === true ? ["Pausiert, weil 10 Sekunden nichts passiert ist."] : [];
   if (player) parts.push(`Konto: ${player}`);
   if (state) parts.push(`Level ${state.level} · ${fmtTime(state.activeMs)} gespielt`);
   $("pause-info").textContent = parts.join(" · ");
