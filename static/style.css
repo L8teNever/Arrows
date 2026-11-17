@@ -113,6 +113,7 @@ body {
 }
 #board { display: block; touch-action: manipulation; overflow: visible; }
 #board .dot { fill: var(--dot); }
+#board .dots { fill: none; stroke: var(--dot); stroke-linecap: round; }
 #board .arrow { cursor: pointer; }
 #board .arrow .body { fill: none; stroke: var(--arrow); stroke-linecap: round; stroke-linejoin: round; transition: stroke .2s; }
 #board .arrow .head { fill: var(--arrow); transition: fill .2s; }

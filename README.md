@@ -2,6 +2,8 @@
 
 Pfeil-Puzzle im Material-3-Look (Android 15) mit unendlich vielen Leveln. Tipp einen Pfeil an, damit er in seine Richtung rausfliegt. Ist ihm ein anderer Pfeil im Weg, kostet das ein Leben. Jedes Level ist garantiert lösbar.
 
+Zwischendurch gibt es Abwechslung: große Felder mit langen Pfeilen und Level in Form von Herz, Kreis, Ring, Raute, Kreuz, Dreieck oder Sanduhr. Am Handy liegt das Feld hochkant, am Tablet quer (Formen bleiben aufrecht).
+
 ## Starten
 
 ```bash

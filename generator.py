@@ -22,6 +22,44 @@ DIRS = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 STEPS = list(DIRS.values())
 
 
+def _heart(u, v):
+    x, y = u * 1.25, -v * 1.3 + 0.15
+    return (x * x + y * y - 1) ** 3 - x * x * y ** 3 <= 0
+
+
+# Formen in Koordinaten -1..1 (u nach rechts, v nach unten)
+SHAPES = {
+    "Herz": _heart,
+    "Kreis": lambda u, v: u * u + v * v <= 1.0,
+    "Ring": lambda u, v: 0.28 <= u * u + v * v <= 1.0,
+    "Raute": lambda u, v: abs(u) + abs(v) <= 1.05,
+    "Kreuz": lambda u, v: abs(u) <= 0.4 or abs(v) <= 0.4,
+    "Dreieck": lambda u, v: abs(u) <= (v + 1) / 2 + 0.05,
+    "Sanduhr": lambda u, v: abs(u) <= abs(v) + 0.2,
+}
+SHAPE_NAMES = list(SHAPES)
+
+
+def shape_of(level: int) -> str | None:
+    """Zwischendurch ein Level in Form (Herz, Kreis ...): ab Level 8, etwa jedes 4.-5. Level, nie zugleich grosses Feld."""
+    if level < 8 or is_big(level):
+        return None
+    rng = random.Random(f"arrows-shape-{level}")
+    if rng.random() >= 0.22:
+        return None
+    return rng.choice(SHAPE_NAMES)
+
+
+def shape_cells(name: str, width: int, height: int) -> set:
+    f = SHAPES[name]
+    return {
+        (x, y)
+        for y in range(height)
+        for x in range(width)
+        if f((x + 0.5) / width * 2 - 1, (y + 0.5) / height * 2 - 1)
+    }
+
+
 def is_big(level: int) -> bool:
     """Ab und zu ein grosses Feld mit langen Pfeilen: ab Level 6 grob jedes 5.-9. Level."""
     if level < 6:
@@ -45,7 +83,13 @@ def level_params(level: int) -> dict:
         height = min(height + 8, 28)
         max_len = min(max(max_len * 3, 16), 36)
         min_len = max_len // 3
-    return {"width": width, "height": height, "max_len": max_len, "min_len": min_len, "big": big}
+    shape = shape_of(level)
+    if shape:
+        # quadratisch und etwas groesser, weil die Ecken frei bleiben
+        side = min(max(width, height) + 4, 22)
+        width = height = side
+        max_len = max(max_len, 6)
+    return {"width": width, "height": height, "max_len": max_len, "min_len": min_len, "big": big, "shape": shape}
 
 
 def _direction(a, b) -> str:
@@ -72,7 +116,7 @@ def _ray_clear(path, occupied, width, height) -> bool:
     return all(c not in occupied and c not in own for c in _ray(head, step, width, height))
 
 
-def _random_walk(rng, start, occupied, width, height, max_len):
+def _random_walk(rng, start, occupied, width, height, max_len, allowed):
     path = [start]
     seen = {start}
     straight_bias = rng.random() * 0.6
@@ -82,7 +126,7 @@ def _random_walk(rng, start, occupied, width, height, max_len):
         options = []
         for s in STEPS:
             nx, ny = x + s[0], y + s[1]
-            if 0 <= nx < width and 0 <= ny < height and (nx, ny) not in occupied and (nx, ny) not in seen:
+            if (nx, ny) in allowed and (nx, ny) not in occupied and (nx, ny) not in seen:
                 options.append(s)
         if not options:
             break
@@ -136,6 +180,15 @@ def generate_level(level: int) -> dict:
     width, height, max_len, min_len = p["width"], p["height"], p["max_len"], p["min_len"]
     rng = random.Random(f"arrows-{level}")
 
+    shape = p["shape"]
+    if shape:
+        allowed = shape_cells(shape, width, height)
+        # leere Raender abschneiden
+        x0, y0 = min(x for x, _ in allowed), min(y for _, y in allowed)
+        allowed = {(x - x0, y - y0) for x, y in allowed}
+        width, height = max(x for x, _ in allowed) + 1, max(y for _, y in allowed) + 1
+    else:
+        allowed = {(x, y) for y in range(height) for x in range(width)}
     occupied: set = set()
     order: list[list] = []
     rays: list[set] = []
@@ -143,13 +196,13 @@ def generate_level(level: int) -> dict:
     for rnd in range(6 if p["big"] else 4):
         # grosse Felder: erst nur lange Pfeile, danach Luecken mit kurzen fuellen
         need = max(2, min_len - rnd * (min_len // 3)) if p["big"] else 2
-        free = [(x, y) for y in range(height) for x in range(width) if (x, y) not in occupied]
+        free = sorted(allowed - occupied)
         rng.shuffle(free)
         for start in free:
             if start in occupied:
                 continue
             for _ in range(5):
-                walk = _random_walk(rng, start, occupied, width, height, rng.randint(need, max_len))
+                walk = _random_walk(rng, start, occupied, width, height, rng.randint(need, max_len), allowed)
                 placed = _try_insert(walk, order, rays, width, height, need) if len(walk) >= need else None
                 if placed:
                     occupied.update(placed)
@@ -163,6 +216,9 @@ def generate_level(level: int) -> dict:
         "width": width,
         "height": height,
         "big": p["big"],
+        "shape": shape,
+        # Form als Zeilen: # = Feld, . = leer (nur bei Formen)
+        "mask": ["".join("#" if (x, y) in allowed else "." for x in range(width)) for y in range(height)] if shape else None,
         "arrows": [
             {
                 "id": i,

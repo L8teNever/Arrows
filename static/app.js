@@ -6,7 +6,7 @@ const SPEED = 22;           // Zellen pro Sekunde beim Rausfliegen
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const SVGNS = "http://www.w3.org/2000/svg";
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const GEN = 2; // Generator-Version, umgeht alte Level im Browser-Cache
+const GEN = 3; // Generator-Version, umgeht alte Level im Browser-Cache
 const levelUrl = (n) => `/api/level/${n}?g=${GEN}`;
 
 const $ = (id) => document.getElementById(id);
@@ -97,13 +97,19 @@ async function loadLevel(n) {
     over: false,
     wide: false,
     big: !!data.big,
+    shape: data.shape || null,
+    mask: data.mask || null, // Zeilen aus # (Feld) und . (leer), nur bei Formen
   };
   $("level-no").textContent = n;
   for (const a of state.arrows.values()) for (const [x, y] of a.cells) state.grid[y * data.width + x] = a.id;
-  if (wantWide()) transpose();
+  // Formen nicht drehen, ein Herz soll aufrecht bleiben
+  if (!state.shape && wantWide()) transpose();
   $("level-info").textContent = `${state.w} × ${state.h} · ${data.arrows.length} Pfeile`;
-  $("big-chip").hidden = !state.big;
+  const special = state.big ? "Großes Feld" : state.shape;
+  $("big-chip").hidden = !special;
+  $("big-text").textContent = special || "";
   if (state.big) snackbar("Großes Feld – lange Pfeile!");
+  else if (state.shape) snackbar(`Sonderform: ${state.shape}`);
   render();
   prefetch(n + 1);
 }
@@ -119,11 +125,20 @@ function render() {
   const { w, h } = state;
   board.setAttribute("viewBox", `${-C * 0.1} ${-C * 0.1} ${w * C + C * 0.2} ${h * C + C * 0.2}`);
 
-  // Ein Rechteck mit Muster statt hunderter Kreise: weniger DOM, weniger Zeichenarbeit
-  board.innerHTML =
-    `<defs><pattern id="dots" width="${C}" height="${C}" patternUnits="userSpaceOnUse">` +
-    `<circle class="dot" cx="${C / 2}" cy="${C / 2}" r="${C * 0.06}"/></pattern></defs>` +
-    `<rect width="${w * C}" height="${h * C}" fill="url(#dots)"/>`;
+  if (state.mask) {
+    // Form: alle Punkte als ein einziger Pfad (runde Linienenden der Laenge 0 = Punkte)
+    let d = "";
+    state.mask.forEach((row, y) => {
+      for (let x = 0; x < row.length; x++) if (row[x] === "#") d += `M${(x + 0.5) * C} ${(y + 0.5) * C}h0`;
+    });
+    board.innerHTML = `<path class="dots" d="${d}" stroke-width="${C * 0.12}"/>`;
+  } else {
+    // Rechteck: ein Muster statt hunderter Kreise, weniger DOM, weniger Zeichenarbeit
+    board.innerHTML =
+      `<defs><pattern id="dots" width="${C}" height="${C}" patternUnits="userSpaceOnUse">` +
+      `<circle class="dot" cx="${C / 2}" cy="${C / 2}" r="${C * 0.06}"/></pattern></defs>` +
+      `<rect width="${w * C}" height="${h * C}" fill="url(#dots)"/>`;
+  }
   const frag = document.createDocumentFragment();
 
   for (const a of state.arrows.values()) {
@@ -192,7 +207,7 @@ addEventListener("resize", () => {
     fitQueued = false;
     if (!state) return;
     const busy = [...state.arrows.values()].some((a) => a.busy || (a.removed && a.el?.isConnected));
-    if (!busy && wantWide() !== state.wide) {
+    if (!busy && !state.shape && wantWide() !== state.wide) {
       transpose();
       $("level-info").textContent = `${state.w} × ${state.h} · ${state.arrows.size} Pfeile`;
       render();
