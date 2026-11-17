@@ -1,7 +1,8 @@
 import gzip
 from functools import lru_cache
+from urllib.parse import quote
 
-from flask import Flask, Response, abort, jsonify, render_template, request, send_from_directory
+from flask import Flask, Response, abort, jsonify, redirect, render_template, request, send_from_directory
 
 import db
 import stats
@@ -82,16 +83,33 @@ def user_result(name: str):
         return jsonify(db.user_json(u))
 
 
+COOKIE = "arrows_player"  # setzt das Spiel, sobald man /Name geoeffnet hat
+
+
 @app.get("/dashboard")
-def dashboard():
+def dashboard_root():
+    """Eingeloggt (vorher /Name geoeffnet): direkt zur eigenen Statistik, sonst Uebersicht."""
+    me = request.cookies.get(COOKIE, "")
+    if db.valid_name(me) and "alle" not in request.args:
+        return redirect(f"/{quote(me)}/dashboard" + (f"?{request.query_string.decode()}" if request.query_string else ""))
+    return _dashboard(None)
+
+
+@app.get("/<name>/dashboard")
+def dashboard_user(name: str):
+    if not db.valid_name(name):
+        abort(404)
+    return _dashboard(name)
+
+
+def _dashboard(name: str | None):
+    me = request.cookies.get(COOKIE, "")
     with db.connect() as con:
         data = stats.collect(con)
-        sel = request.args.get("u", "")
         detail = None
-        if sel:
-            user = next((u for u in data["users"] if u["name"].lower() == sel.lower()), None)
-            if user:
-                detail = {"user": user, "rows": stats.user_detail(con, data, user["id"])}
+        if name:
+            user = next((u for u in data["users"] if u["name"].lower() == name.lower()), None)
+            detail = {"user": user, "rows": stats.user_detail(con, data, user["id"]) if user else [], "name": name}
         lvl = request.args.get("level", type=int)
         ranking = None
         if lvl and lvl in data["best"]:
@@ -103,8 +121,10 @@ def dashboard():
                     ({"name": names[uid], **e} for uid, e in data["best"][lvl].items()), key=lambda e: e["ms"]
                 ),
             }
+    base = f"/{quote(detail['user']['name'] if detail and detail['user'] else name)}/dashboard" if name else "/dashboard"
     resp = Response(render_template(
-        "dashboard.html", data=data, detail=detail, ranking=ranking, recent=data["levels"][:30]
+        "dashboard.html", data=data, detail=detail, ranking=ranking, recent=data["levels"][:30],
+        base=base, me=me if db.valid_name(me) else "",
     ))
     resp.headers["Cache-Control"] = "no-store"
     return resp

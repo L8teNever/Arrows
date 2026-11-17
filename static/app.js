@@ -474,7 +474,7 @@ $("win-replay").onclick = () => { $("dlg-win").close(); loadLevel(state.level); 
 $("lose-retry").onclick = () => { $("dlg-lose").close(); loadLevel(state.level); };
 
 function openLevels() {
-  $("stats-link").href = player ? `/dashboard?u=${encodeURIComponent(player)}` : "/dashboard";
+  $("stats-link").href = player ? `/${encodeURIComponent(player)}/dashboard` : "/dashboard";
   $("player-line").textContent = player ? `Konto: ${player}` : "Als Gast (nur auf diesem Gerät)";
   $("max-level").textContent = store.max;
   $("level-input").max = store.max;
@@ -508,8 +508,14 @@ $("name-guest").onclick = () => { $("dlg-name").close(); localStorage.setItem("a
 $("switch-player").onclick = () => {
   localStorage.removeItem("arrows.player");
   localStorage.removeItem("arrows.guest");
+  document.cookie = "arrows_player=; path=/; max-age=0";
   location.href = "/";
 };
+
+// Cookie, damit /dashboard direkt zur eigenen Statistik fuehrt (1 Jahr)
+function rememberLogin() {
+  document.cookie = `arrows_player=${encodeURIComponent(player)}; path=/; max-age=31536000; SameSite=Lax`;
+}
 
 async function start() {
   applyTheme();
@@ -519,6 +525,7 @@ async function start() {
     return;
   }
   localStorage.setItem("arrows.player", player);
+  rememberLogin();
   document.title = `Arrows – ${player}`;
   let level = store.level;
   try {
@@ -526,6 +533,7 @@ async function start() {
     if (res.ok) {
       const u = await res.json();
       player = u.name; // Schreibweise wie beim Anlegen
+      rememberLogin();
       serverLevel = u.level;
       // Server gilt, ausser dieses Geraet ist weiter (Ergebnisse noch im Postausgang)
       if (store.max <= u.max) level = u.level;

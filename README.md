@@ -16,7 +16,8 @@ Das Image baut GitHub Actions bei jedem Push auf `main` nach `ghcr.io/l8tenever/
 
 - `/Simon` spielt mit Simons Konto, ein neuer Name (z. B. `/Lena`) legt beim ersten Aufruf ein Konto an. Der Fortschritt liegt auf dem Server, man spielt auf jedem Gerät weiter.
 - `/` fragt nach dem Namen (oder Gast, nur lokal). Die installierte App merkt sich das letzte Konto.
-- `/dashboard` zeigt alle Spieler (Level, Spielzeit, Ø pro Level, Tempo im Vergleich, Fehler), die Zeiten pro Level und eine Detailseite je Spieler (`?u=Name`) bzw. Rangliste je Level (`?level=12`).
+- `/Name/dashboard` zeigt die eigene Statistik (Level, Spielzeit, Ø pro Level, Tempo im Vergleich, Fehler, alle Level) und darunter den Vergleich mit allen. `?level=12` zeigt die Rangliste eines Levels.
+- `/dashboard` führt nach dem Öffnen von `/Name` (Cookie) direkt zur eigenen Statistik, sonst zur Übersicht; `/dashboard?alle` zeigt immer die Übersicht.
 - Gezählt wird nur aktive Spielzeit (App sichtbar). Daten in SQLite unter `/data/arrows.db` (Docker-Volume).
 - Kein Passwort: wer den Namen kennt, kann mit dem Konto spielen.
 

@@ -19,3 +19,7 @@ tr.top td, td.best { color: var(--on-primary-container); background: var(--prima
 .kpis b { font-size: 20px; font-weight: 500; }
 .kpis span { font-size: 12px; color: var(--on-surface-variant); }
 .dash .btn.text { margin-top: 8px; padding: 0 12px; display: inline-flex; }
+tr.me td:first-child, th.me { box-shadow: inset 3px 0 0 var(--primary); }
+th.me { box-shadow: none; color: var(--primary); }
+.scroll.limit { max-height: 60vh; overflow-y: auto; }
+.dash .top-app-bar .sub { font-size: 12px; }

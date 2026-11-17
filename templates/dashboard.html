@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#fef7ff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#141218" media="(prefers-color-scheme: dark)">
-  <title>Arrows – Statistik</title>
+  <title>Arrows – Statistik{% if detail %} – {{ detail.name }}{% endif %}</title>
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/dashboard.css">
@@ -16,51 +16,20 @@
   </script>
 </head>
 <body class="dash">
+  {% set dash = '/' ~ (me | urlencode) ~ '/dashboard' if me else '/dashboard' %}
   <header class="top-app-bar">
-    <a class="icon-btn" href="{{ '/' + detail.user.name if detail else '/' }}" aria-label="Zum Spiel">
+    <a class="icon-btn" href="{{ '/' ~ (me | urlencode) if me else '/' }}" aria-label="Zum Spiel">
       <svg class="ic" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
     </a>
-    <div class="title"><span class="headline">Statistik</span></div>
+    <div class="title">
+      <span class="headline">Statistik</span>
+      {% if me %}<span class="sub">angemeldet als {{ me }}</span>{% endif %}
+    </div>
     <span style="width:48px"></span>
   </header>
 
   <main class="dash-main">
-  {% if detail %}
-    {% set u = detail.user %}
-    <section class="card">
-      <h2>{{ u.name }}</h2>
-      <div class="kpis">
-        <div><b>{{ u.max_level }}</b><span>Level erreicht</span></div>
-        <div><b>{{ u.solved }}</b><span>gelöst</span></div>
-        <div><b>{{ u.play_ms | dauer }}</b><span>Spielzeit</span></div>
-        <div><b>{{ u.avg_ms | dauer }}</b><span>Ø pro Level</span></div>
-        <div><b>{{ u.speed | tempo }}</b><span>Tempo ggü. anderen</span></div>
-        <div><b>{{ '%.1f' % u.avg_mistakes if u.avg_mistakes is not none else '–' }}</b><span>Ø Fehler</span></div>
-      </div>
-      <a class="btn text" href="/dashboard">Alle Spieler</a>
-    </section>
-    <section class="card">
-      <h2>Level von {{ u.name }}</h2>
-      {% if detail.rows %}
-      <div class="scroll"><table>
-        <thead><tr><th>Level</th><th>Bestzeit</th><th>Fehler</th><th>Gelöst</th><th>Platz</th><th>ggü. anderen</th></tr></thead>
-        <tbody>
-        {% for r in detail.rows %}
-          <tr>
-            <td><a href="/dashboard?level={{ r.level }}">{{ r.level }}</a></td>
-            <td>{{ r.ms | dauer }}</td>
-            <td>{{ r.mistakes }}</td>
-            <td>{{ r.wins }}×</td>
-            <td>{{ r.rank }} / {{ r.players }}</td>
-            <td>{{ r.vs }}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table></div>
-      {% else %}<p class="empty">Noch kein Level geschafft.</p>{% endif %}
-    </section>
-
-  {% elif ranking %}
+  {% if ranking %}
     <section class="card">
       <h2>Level {{ ranking.level }}</h2>
       <p class="sub-line">{{ ranking.params.width }} × {{ ranking.params.height }}{% if ranking.params.big %} · Großes Feld{% endif %}{% if ranking.params.shape %} · {{ ranking.params.shape }}{% endif %}</p>
@@ -68,9 +37,9 @@
         <thead><tr><th>#</th><th>Spieler</th><th>Bestzeit</th><th>Fehler</th><th>Gelöst</th></tr></thead>
         <tbody>
         {% for r in ranking.rows %}
-          <tr{% if loop.first %} class="top"{% endif %}>
+          <tr class="{{ 'top' if loop.first }} {{ 'me' if r.name | lower == me | lower }}">
             <td>{{ loop.index }}</td>
-            <td><a href="/dashboard?u={{ r.name }}">{{ r.name }}</a></td>
+            <td><a href="/{{ r.name | urlencode }}/dashboard">{{ r.name }}</a></td>
             <td>{{ r.ms | dauer }}</td>
             <td>{{ r.mistakes }}</td>
             <td>{{ r.wins }}×</td>
@@ -78,19 +47,60 @@
         {% endfor %}
         </tbody>
       </table></div>
-      <a class="btn text" href="/dashboard">Zurück</a>
+      <a class="btn text" href="{{ base }}">Zurück</a>
     </section>
 
   {% else %}
+    {% if detail %}
+      {% set u = detail.user %}
+      <section class="card">
+        <h2>{{ u.name if u else detail.name }}</h2>
+        {% if u %}
+        <div class="kpis">
+          <div><b>{{ u.max_level }}</b><span>Level erreicht</span></div>
+          <div><b>{{ u.solved }}</b><span>gelöst</span></div>
+          <div><b>{{ u.play_ms | dauer }}</b><span>Spielzeit</span></div>
+          <div><b>{{ u.avg_ms | dauer }}</b><span>Ø pro Level</span></div>
+          <div><b>{{ u.speed | tempo }}</b><span>Tempo ggü. anderen</span></div>
+          <div><b>{{ '%.1f' % u.avg_mistakes if u.avg_mistakes is not none else '–' }}</b><span>Ø Fehler</span></div>
+        </div>
+        {% else %}
+        <p class="empty">Dieses Konto gibt es noch nicht. Öffne <a href="/{{ detail.name | urlencode }}">/{{ detail.name }}</a> zum Spielen.</p>
+        {% endif %}
+      </section>
+      {% if u %}
+      <section class="card">
+        <h2>Level von {{ u.name }}</h2>
+        {% if detail.rows %}
+        <div class="scroll limit"><table>
+          <thead><tr><th>Level</th><th>Bestzeit</th><th>Fehler</th><th>Gelöst</th><th>Platz</th><th>ggü. anderen</th></tr></thead>
+          <tbody>
+          {% for r in detail.rows %}
+            <tr>
+              <td><a href="{{ base }}?level={{ r.level }}">{{ r.level }}</a></td>
+              <td>{{ r.ms | dauer }}</td>
+              <td>{{ r.mistakes }}</td>
+              <td>{{ r.wins }}×</td>
+              <td>{{ r.rank }} / {{ r.players }}</td>
+              <td>{{ r.vs }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table></div>
+        {% else %}<p class="empty">Noch kein Level geschafft.</p>{% endif %}
+      </section>
+      {% endif %}
+    {% endif %}
+
     <section class="card">
-      <h2>Spieler</h2>
+      <h2>{{ 'Vergleich' if detail else 'Spieler' }}</h2>
       {% if data.users %}
       <div class="scroll"><table>
         <thead><tr><th>Spieler</th><th>Level</th><th>Gelöst</th><th>Spielzeit</th><th>Ø pro Level</th><th>Tempo ggü. anderen</th><th>Ø Fehler</th></tr></thead>
         <tbody>
         {% for u in data.users %}
-          <tr>
-            <td><a href="/dashboard?u={{ u.name }}">{{ u.name }}</a></td>
+          <tr class="{{ 'me' if u.name | lower == me | lower }}">
+            <td><a href="/{{ u.name | urlencode }}/dashboard">{{ u.name }}</a></td>
             <td>{{ u.max_level }}</td>
             <td>{{ u.solved }}</td>
             <td>{{ u.play_ms | dauer }}</td>
@@ -108,13 +118,13 @@
     <section class="card">
       <h2>Zeiten pro Level</h2>
       <div class="scroll"><table class="grid">
-        <thead><tr><th>Level</th>{% for u in data.users %}<th>{{ u.name }}</th>{% endfor %}</tr></thead>
+        <thead><tr><th>Level</th>{% for u in data.users %}<th class="{{ 'me' if u.name | lower == me | lower }}">{{ u.name }}</th>{% endfor %}</tr></thead>
         <tbody>
         {% for lvl in recent %}
           {% set row = data.best[lvl] %}
           {% set fastest = row.values() | map(attribute='ms') | min %}
           <tr>
-            <td><a href="/dashboard?level={{ lvl }}">{{ lvl }}</a></td>
+            <td><a href="{{ base }}?level={{ lvl }}">{{ lvl }}</a></td>
             {% for u in data.users %}
               {% set e = row.get(u.id) %}
               <td{% if e and e.ms == fastest and row|length > 1 %} class="best"{% endif %}>{{ e.ms | dauer if e else '' }}</td>
