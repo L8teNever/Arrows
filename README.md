@@ -35,3 +35,18 @@ Das Image baut GitHub Actions bei jedem Push auf `main` nach `ghcr.io/l8tenever/
 - `generator.py` erzeugt die Level, `app.py` ist der Flask-Server, `static/` das Frontend.
 - Nach Änderungen an HTML/CSS/JS `VERSION` in `static/sw.js` hochzählen, sonst bleibt am Handy die alte Version im Cache.
 - Icons neu erzeugen: `python icons.py`
+
+## Login über Cloudflare Zero Trust
+
+Liegt die Seite hinter einer Cloudflare-Access-Application, liest der Server die Mail aus
+`Cf-Access-Authenticated-User-Email` und legt daraus automatisch das Konto an (Name = Teil vor dem @,
+z. B. `l8tenever@gmail.com` → `l8tenever`). Man spielt dann immer mit dem eigenen Konto, `/Name` und
+„Konto wechseln“ entfallen. Ohne Access gilt weiter `/Name`.
+
+Optional prüft der Server zusätzlich das signierte Access-Token, damit der Header nicht gefälscht werden kann:
+
+```yaml
+environment:
+  ARROWS_ACCESS_TEAM: kulbarts          # kulbarts.cloudflareaccess.com
+  ARROWS_ACCESS_AUD: <Application Audience Tag>
+```
