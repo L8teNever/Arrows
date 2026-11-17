@@ -171,6 +171,42 @@ dialog p { margin: 0 0 16px; color: var(--on-surface-variant); font-size: 14px; 
 .dlg-links { display: flex; justify-content: space-between; margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--outline-variant); }
 a.btn { text-decoration: none; }
 #dlg-levels h2 { margin-top: 0; }
+
+/* Pause-Menue */
+#dlg-pause { text-align: left; }
+#dlg-pause h2 { margin-top: 0; }
+#dlg-pause h3 { margin: 20px 0 4px; font-size: 14px; font-weight: 500; color: var(--primary); }
+.menu { display: flex; flex-direction: column; gap: 4px; }
+.menu-item {
+  position: relative; display: flex; align-items: center; gap: 16px; width: 100%; min-height: 52px; padding: 0 16px;
+  border: 0; border-radius: var(--shape-xl); background: transparent; color: var(--on-surface);
+  font: inherit; font-size: 16px; text-decoration: none; cursor: pointer; overflow: hidden;
+}
+.menu-item .ic { color: var(--on-surface-variant); }
+.menu-item.primary { background: var(--primary); color: var(--on-primary); }
+.menu-item.primary .ic { color: inherit; }
+.menu-item::after { content: ""; position: absolute; inset: 0; background: currentColor; opacity: 0; transition: opacity .15s; }
+.menu-item:hover::after { opacity: .08; }
+.menu-item:active::after { opacity: .12; }
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; font-size: 16px; }
+.segmented { display: flex; border: 1px solid var(--outline-variant); border-radius: 20px; overflow: hidden; }
+.segmented button {
+  border: 0; background: transparent; color: var(--on-surface); font: inherit; font-size: 14px;
+  padding: 8px 12px; cursor: pointer;
+}
+.segmented button + button { border-left: 1px solid var(--outline-variant); }
+.segmented button[aria-checked="true"] { background: var(--secondary-container, var(--surface-container-highest)); font-weight: 500; }
+.switch {
+  appearance: none; width: 52px; height: 32px; border-radius: 16px; margin: 0; flex: none; cursor: pointer;
+  border: 2px solid var(--outline-variant); background: var(--surface-container-highest); position: relative;
+  transition: background .15s, border-color .15s;
+}
+.switch::before {
+  content: ""; position: absolute; top: 50%; left: 6px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--on-surface-variant); transform: translateY(-50%); transition: left .15s, width .15s, height .15s;
+}
+.switch:checked { background: var(--primary); border-color: var(--primary); }
+.switch:checked::before { left: 22px; width: 24px; height: 24px; background: var(--on-primary); }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--primary); }
 .field input {
   font: 16px inherit; font-family: inherit; padding: 14px 16px; border-radius: 4px;

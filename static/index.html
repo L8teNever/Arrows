@@ -23,6 +23,9 @@
     <symbol id="i-restart" viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></symbol>
     <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19a7 7 0 0 0-4 12.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26A7 7 0 0 0 12 2z"/></symbol>
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></symbol>
   </svg>
   <header class="top-app-bar">
@@ -31,7 +34,7 @@
       <span class="headline">Level <span id="level-no">1</span></span>
       <span class="sub" id="level-info"></span>
     </div>
-    <button class="icon-btn" id="btn-theme" aria-label="Design wechseln"><svg class="ic"><use href="#i-dark"/></svg></button>
+    <button class="icon-btn" id="btn-pause" aria-label="Pause"><svg class="ic"><use href="#i-pause"/></svg></button>
   </header>
 
   <section class="status">
@@ -73,6 +76,28 @@
     <div class="dlg-actions">
       <button class="btn filled" id="lose-retry">Nochmal versuchen</button>
     </div>
+  </dialog>
+
+  <dialog id="dlg-pause">
+    <h2>Pause</h2>
+    <p id="pause-info"></p>
+    <div class="menu">
+      <button class="menu-item primary" id="pause-resume"><svg class="ic"><use href="#i-play"/></svg>Weiterspielen</button>
+      <button class="menu-item" id="pause-levels"><svg class="ic"><use href="#i-grid"/></svg>Level wählen</button>
+      <button class="menu-item" id="pause-restart"><svg class="ic"><use href="#i-restart"/></svg>Level neu starten</button>
+      <a class="menu-item" id="pause-stats" href="/dashboard"><svg class="ic"><use href="#i-chart"/></svg>Statistik</a>
+    </div>
+    <h3>Einstellungen</h3>
+    <div class="setting">
+      <span>Design</span>
+      <div class="segmented" id="set-theme" role="radiogroup" aria-label="Design">
+        <button data-v="system">System</button><button data-v="light">Hell</button><button data-v="dark">Dunkel</button>
+      </div>
+    </div>
+    <label class="setting">
+      <span>Vibration</span>
+      <input type="checkbox" class="switch" id="set-vibrate">
+    </label>
   </dialog>
 
   <dialog id="dlg-levels">

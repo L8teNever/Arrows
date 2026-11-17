@@ -27,7 +27,9 @@ const store = {
   get max() { return +localStorage.getItem(key("max")) || 1; },
   set max(v) { localStorage.setItem(key("max"), Math.max(v, this.max)); },
   get theme() { return localStorage.getItem("arrows.theme"); },
-  set theme(v) { localStorage.setItem("arrows.theme", v); },
+  set theme(v) { v === "system" ? localStorage.removeItem("arrows.theme") : localStorage.setItem("arrows.theme", v); },
+  get vibrate() { return localStorage.getItem("arrows.vibrate") !== "0"; },
+  set vibrate(v) { localStorage.setItem("arrows.vibrate", v ? "1" : "0"); },
 };
 
 let state = null;
@@ -36,15 +38,18 @@ let state = null;
 function applyTheme() {
   const t = store.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   document.documentElement.classList.toggle("dark", t === "dark");
-  $("btn-theme").querySelector("use").setAttribute("href", t === "dark" ? "#i-light" : "#i-dark");
+  const sel = store.theme || "system";
+  for (const b of $("set-theme").children) b.setAttribute("aria-checked", b.dataset.v === sel);
   document.querySelector('meta[name="theme-color"]:not([media])')?.remove();
   const m = document.createElement("meta");
   m.name = "theme-color";
   m.content = t === "dark" ? "#141218" : "#fef7ff";
   document.head.appendChild(m);
 }
-$("btn-theme").onclick = () => {
-  store.theme = document.documentElement.classList.contains("dark") ? "light" : "dark";
+$("set-theme").onclick = (e) => {
+  const v = e.target.closest("button")?.dataset.v;
+  if (!v) return;
+  store.theme = v;
   applyTheme();
 };
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
@@ -57,7 +62,7 @@ function snackbar(text) {
   clearTimeout(s._t);
   s._t = setTimeout(() => s.classList.remove("show"), 2200);
 }
-function vibrate(ms) { navigator.vibrate?.(ms); }
+function vibrate(ms) { if (store.vibrate) navigator.vibrate?.(ms); }
 const center = ([x, y]) => [(x + 0.5) * C, (y + 0.5) * C];
 
 /* ---------- Server-Abgleich (sparsam) ----------
@@ -108,7 +113,7 @@ function reportProgress(beacon) {
 /* ---------- Spielzeit: laeuft nur, solange die App sichtbar ist ---------- */
 let segStart = null;
 function clockStart() {
-  if (state && !state.over && segStart === null && document.visibilityState === "visible") segStart = performance.now();
+  if (state && !state.over && segStart === null && document.visibilityState === "visible" && !$("dlg-pause").open) segStart = performance.now();
 }
 function clockStop() {
   if (segStart === null || !state) return;
@@ -467,6 +472,28 @@ $("btn-restart").onclick = () => loadLevel(state.level);
 $("win-next").onclick = () => { $("dlg-win").close(); loadLevel(state.level + 1); };
 $("win-replay").onclick = () => { $("dlg-win").close(); loadLevel(state.level); };
 $("lose-retry").onclick = () => { $("dlg-lose").close(); loadLevel(state.level); };
+
+/* ---------- Pause: Uhr steht, solange das Menue offen ist ---------- */
+function fmtTime(ms) {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+function openPause() {
+  clockStop();
+  $("dlg-pause").showModal(); // erst oeffnen, dann zaehlt clockStart() nicht weiter
+  const parts = [];
+  if (player) parts.push(`Konto: ${player}`);
+  if (state) parts.push(`Level ${state.level} · ${fmtTime(state.activeMs)} gespielt`);
+  $("pause-info").textContent = parts.join(" · ");
+  $("pause-stats").href = player ? `/${encodeURIComponent(player)}/dashboard` : "/dashboard";
+  $("set-vibrate").checked = store.vibrate;
+}
+$("btn-pause").onclick = openPause;
+$("dlg-pause").addEventListener("close", () => clockStart());
+$("pause-resume").onclick = () => $("dlg-pause").close();
+$("pause-restart").onclick = () => { $("dlg-pause").close(); loadLevel(state.level); };
+$("pause-levels").onclick = () => { $("dlg-pause").close(); openLevels(); };
+$("set-vibrate").onchange = (e) => { store.vibrate = e.target.checked; if (store.vibrate) vibrate(15); };
 
 function openLevels() {
   $("stats-link").href = player ? `/${encodeURIComponent(player)}/dashboard` : "/dashboard";
