@@ -15,6 +15,8 @@ MAX_LEVEL = 1_000_000
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.jinja_env.filters["dauer"] = stats.fmt_ms
 app.jinja_env.filters["tempo"] = stats.fmt_speed
+app.jinja_env.filters["seit"] = stats.fmt_ago
+app.jinja_env.filters["tempoklasse"] = stats.speed_class
 db.init()
 
 
@@ -151,6 +153,27 @@ def user_progress():
         return jsonify(db.user_json(u))
 
 
+@app.get("/api/me/levels")
+def user_levels():
+    """Bestzeit je geschafftem Level fuer die Levelauswahl."""
+    with db.connect() as con:
+        u = _require_user(con)
+        resp = jsonify({"best": db.best_times(con, u["id"]), "max": u["max_level"]})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.get("/api/stats/version")
+def stats_version():
+    """Live-Statistik fragt hier alle paar Sekunden nach, unveraendert = kurzes 304."""
+    with db.connect() as con:
+        v = db.stats_version(con)
+    resp = jsonify({"v": v})
+    resp.set_etag(v)
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp.make_conditional(request)
+
+
 @app.post("/api/me/result")
 def user_result():
     body = request.get_json(force=True, silent=True) or {}
@@ -211,7 +234,7 @@ def _dashboard(name: str | None):
             }
     base = f"/{quote(detail['user']['name'] if detail and detail['user'] else name)}/dashboard" if name else "/dashboard"
     resp = Response(render_template(
-        "dashboard.html", data=data, detail=detail, ranking=ranking, recent=data["levels"][:30],
+        "dashboard.html", data=data, detail=detail, ranking=ranking, recent=data["levels"][:15],
         base=base, me=me,
     ))
     resp.headers["Cache-Control"] = "no-store"

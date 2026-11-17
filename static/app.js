@@ -510,24 +510,54 @@ $("pause-restart").onclick = () => { $("dlg-pause").close(); loadLevel(state.lev
 $("pause-levels").onclick = () => { $("dlg-pause").close(); openLevels(); };
 $("set-vibrate").onchange = (e) => { store.vibrate = e.target.checked; if (store.vibrate) vibrate(15); };
 
+/* ---------- Levelauswahl: Raster zum Antippen ---------- */
+const LOCKED_PREVIEW = 3; // so viele gesperrte Level als Ausblick
+let bestTimes = {};       // Bestzeit je Level (vom Server), fuer die kleinen Zeiten unter der Nummer
+
+function fmtShort(ms) {
+  const s = Math.round(ms / 1000);
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+function renderLevelGrid() {
+  const grid = $("level-grid"), cur = state?.level || store.level, max = store.max;
+  const frag = document.createDocumentFragment();
+  for (let n = 1; n <= max + LOCKED_PREVIEW; n++) {
+    const b = document.createElement("button");
+    b.className = "lvl" + (n === cur ? " cur" : "") + (n > max ? " locked" : n === max ? " new" : " done");
+    b.dataset.n = n;
+    b.setAttribute("role", "listitem");
+    const t = bestTimes[n];
+    b.innerHTML = `<b>${n}</b><span>${n > max ? "🔒" : t ? fmtShort(t) : n === max ? "neu" : "✓"}</span>`;
+    if (n > max) b.disabled = true;
+    frag.appendChild(b);
+  }
+  grid.replaceChildren(frag);
+}
 function openLevels() {
   $("stats-link").href = player ? `/${encodeURIComponent(player)}/dashboard` : "/dashboard";
-  $("player-line").textContent = player ? `Konto: ${player}` : "Nicht angemeldet (nur auf diesem Gerät)";
-  $("max-level").textContent = store.max;
-  $("level-input").max = store.max;
-  $("level-input").value = state?.level || 1;
+  $("player-line").textContent = `${player ? `Konto: ${player} · ` : "Nicht angemeldet · "}freigeschaltet bis Level ${store.max}`;
+  renderLevelGrid();
   $("dlg-levels").showModal();
+  $("level-grid").querySelector(".cur")?.scrollIntoView({ block: "center" });
+  if (player && navigator.onLine) {
+    fetch("/api/me/levels", { cache: "no-store" }).then((r) => r.ok && r.json()).then((d) => {
+      if (!d || !$("dlg-levels").open) return;
+      bestTimes = d.best;
+      const y = $("level-grid").scrollTop;
+      renderLevelGrid();
+      $("level-grid").scrollTop = y;
+    }).catch(() => {});
+  }
 }
+$("level-grid").onclick = (e) => {
+  const b = e.target.closest(".lvl");
+  if (!b || b.disabled) return;
+  $("dlg-levels").close();
+  loadLevel(+b.dataset.n);
+};
 $("btn-levels").onclick = openLevels;
 $("btn-levels2").onclick = openLevels;
 $("levels-cancel").onclick = () => $("dlg-levels").close();
-$("levels-go").onclick = () => {
-  const n = +$("level-input").value;
-  if (!n || n < 1 || n > store.max) { snackbar(`Wähle ein Level von 1 bis ${store.max}`); return; }
-  $("dlg-levels").close();
-  loadLevel(n);
-};
-$("level-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("levels-go").click(); });
 
 // Zero Trust: Cloudflare kennt die Mail, der Server macht daraus das Konto. Offline gilt das letzte bekannte.
 async function accessLogin() {

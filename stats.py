@@ -77,3 +77,27 @@ def user_detail(con, data: dict, uid: int) -> list[dict]:
             "vs": fmt_speed(entry["ms"] / median(others)) if others else "–",
         })
     return rows
+
+
+def fmt_ago(ts: int | None, now: int | None = None) -> str:
+    """Wann zuletzt aktiv, kurz: 'gerade', 'vor 5 min', 'vor 3 h', 'vor 2 Tagen'."""
+    import time
+
+    if not ts:
+        return "–"
+    d = max(0, int((now or time.time()) - ts))
+    if d < 120:
+        return "gerade aktiv"
+    if d < 3600:
+        return f"vor {d // 60} min"
+    if d < 86400:
+        return f"vor {d // 3600} h"
+    days = d // 86400
+    return "gestern" if days == 1 else f"vor {days} Tagen"
+
+
+def speed_class(f: float | None) -> str:
+    if f is None:
+        return ""
+    pct = round((1 - f) * 100)
+    return "" if abs(pct) < 3 else ("fast" if pct > 0 else "slow")

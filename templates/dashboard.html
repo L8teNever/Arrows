@@ -25,46 +25,47 @@
       <span class="headline">Statistik</span>
       {% if me %}<span class="sub">angemeldet als {{ me }}{% if not detail or detail.name | lower != me | lower %} · <a href="{{ dash }}">meine Statistik</a>{% endif %}</span>{% endif %}
     </div>
-    <span style="width:48px"></span>
+    <span class="live" id="live" title="Aktualisiert sich live">live</span>
   </header>
 
-  <main class="dash-main">
+  <main class="dash-main" id="dash-main">
+  {% macro medal(n) %}<span class="rank r{{ n if n <= 3 else 'x' }}">{{ n }}</span>{% endmacro %}
   {% if ranking %}
     <section class="card">
       <h2>Level {{ ranking.level }}</h2>
       <p class="sub-line">{{ ranking.params.width }} × {{ ranking.params.height }}{% if ranking.params.big %} · Großes Feld{% endif %}{% if ranking.params.shape %} · {{ ranking.params.shape }}{% endif %}</p>
-      <div class="scroll"><table>
-        <thead><tr><th>#</th><th>Spieler</th><th>Bestzeit</th><th>Fehler</th><th>Gelöst</th></tr></thead>
-        <tbody>
-        {% for r in ranking.rows %}
-          <tr class="{{ 'top' if loop.first }} {{ 'me' if r.name | lower == me | lower }}">
-            <td>{{ loop.index }}</td>
-            <td><a href="/{{ r.name | urlencode }}/dashboard">{{ r.name }}</a></td>
-            <td>{{ r.ms | dauer }}</td>
-            <td>{{ r.mistakes }}</td>
-            <td>{{ r.wins }}×</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table></div>
+      <ol class="rows">
+      {% for r in ranking.rows %}
+        <li class="{{ 'me' if r.name | lower == me | lower }}">
+          {{ medal(loop.index) }}
+          <a class="who" href="/{{ r.name | urlencode }}/dashboard"><b>{{ r.name }}{% if r.name | lower == me | lower %} <small>(du)</small>{% endif %}</b>
+            <span>{{ r.mistakes }} Fehler · {{ r.wins }}× gelöst</span></a>
+          <span class="val">{{ r.ms | dauer }}</span>
+        </li>
+      {% endfor %}
+      </ol>
       <a class="btn text" href="{{ base }}">Zurück</a>
     </section>
 
   {% else %}
     {% if detail %}
       {% set u = detail.user %}
-      <section class="card">
-        <h2>{{ u.name if u else detail.name }}</h2>
+      <section class="card hero">
         {% if u %}
+        <div class="hero-head">
+          <h2>{{ u.name }}{% if u.name | lower == me | lower %} <small>(du)</small>{% endif %}</h2>
+          <span class="chip-s">{{ u.last_seen | seit }}</span>
+        </div>
         <div class="kpis">
-          <div><b>{{ u.max_level }}</b><span>Level erreicht</span></div>
-          <div><b>{{ u.solved }}</b><span>gelöst</span></div>
+          <div class="main"><b>{{ u.max_level }}</b><span>Level erreicht</span></div>
+          <div><b>{{ u.solved }}</b><span>Level gelöst</span></div>
           <div><b>{{ u.play_ms | dauer }}</b><span>Spielzeit</span></div>
           <div><b>{{ u.avg_ms | dauer }}</b><span>Ø pro Level</span></div>
-          <div><b>{{ u.speed | tempo }}</b><span>Tempo ggü. anderen</span></div>
+          <div class="{{ u.speed | tempoklasse }}"><b>{{ u.speed | tempo }}</b><span>Tempo ggü. anderen</span></div>
           <div><b>{{ '%.1f' % u.avg_mistakes if u.avg_mistakes is not none else '–' }}</b><span>Ø Fehler</span></div>
         </div>
         {% else %}
+        <h2>{{ detail.name }}</h2>
         <p class="empty">Dieses Konto gibt es nicht. <a href="/dashboard?alle">Alle Spieler</a></p>
         {% endif %}
       </section>
@@ -73,50 +74,44 @@
         <h2>Level von {{ u.name }}</h2>
         {% if detail.rows %}
         <div class="scroll limit"><table>
-          <thead><tr><th>Level</th><th>Bestzeit</th><th>Fehler</th><th>Gelöst</th><th>Platz</th><th>ggü. anderen</th></tr></thead>
+          <thead><tr><th>Level</th><th>Bestzeit</th><th>Platz</th><th>ggü. anderen</th><th>Fehler</th></tr></thead>
           <tbody>
           {% for r in detail.rows %}
             <tr>
               <td><a href="{{ base }}?level={{ r.level }}">{{ r.level }}</a></td>
               <td>{{ r.ms | dauer }}</td>
-              <td>{{ r.mistakes }}</td>
-              <td>{{ r.wins }}×</td>
-              <td>{{ r.rank }} / {{ r.players }}</td>
+              <td>{{ medal(r.rank) }} <small>von {{ r.players }}</small></td>
               <td>{{ r.vs }}</td>
+              <td>{{ r.mistakes }}</td>
             </tr>
           {% endfor %}
           </tbody>
         </table></div>
+        <p class="hint">Tipp auf ein Level für die Rangliste.</p>
         {% else %}<p class="empty">Noch kein Level geschafft.</p>{% endif %}
       </section>
       {% endif %}
     {% endif %}
 
     <section class="card">
-      <h2>{{ 'Vergleich' if detail else 'Spieler' }}</h2>
+      <h2>Rangliste</h2>
       {% if data.users %}
-      <div class="scroll"><table>
-        <thead><tr><th>Spieler</th><th>Level</th><th>Gelöst</th><th>Spielzeit</th><th>Ø pro Level</th><th>Tempo ggü. anderen</th><th>Ø Fehler</th></tr></thead>
-        <tbody>
-        {% for u in data.users %}
-          <tr class="{{ 'me' if u.name | lower == me | lower }}">
-            <td><a href="/{{ u.name | urlencode }}/dashboard">{{ u.name }}</a></td>
-            <td>{{ u.max_level }}</td>
-            <td>{{ u.solved }}</td>
-            <td>{{ u.play_ms | dauer }}</td>
-            <td>{{ u.avg_ms | dauer }}</td>
-            <td>{{ u.speed | tempo }}</td>
-            <td>{{ '%.1f' % u.avg_mistakes if u.avg_mistakes is not none else '–' }}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table></div>
+      <ol class="rows">
+      {% for u in data.users %}
+        <li class="{{ 'me' if u.name | lower == me | lower }}">
+          {{ medal(loop.index) }}
+          <a class="who" href="/{{ u.name | urlencode }}/dashboard"><b>{{ u.name }}{% if u.name | lower == me | lower %} <small>(du)</small>{% endif %}</b>
+            <span>{{ u.solved }} gelöst · {{ u.play_ms | dauer }} gespielt · Ø {{ u.avg_ms | dauer }} · {{ u.last_seen | seit }}</span></a>
+          <span class="val"><b>Level {{ u.max_level }}</b>{% if u.speed is not none %}<span class="tempo {{ u.speed | tempoklasse }}">{{ u.speed | tempo }}</span>{% endif %}</span>
+        </li>
+      {% endfor %}
+      </ol>
       {% else %}<p class="empty">Noch niemand da. <a href="/">Spiel ein Level</a>, dann tauchst du hier auf.</p>{% endif %}
     </section>
 
     {% if recent %}
     <section class="card">
-      <h2>Zeiten pro Level</h2>
+      <h2>Zeiten der letzten Level</h2>
       <div class="scroll"><table class="grid">
         <thead><tr><th>Level</th>{% for u in data.users %}<th class="{{ 'me' if u.name | lower == me | lower }}">{{ u.name }}</th>{% endfor %}</tr></thead>
         <tbody>
@@ -127,16 +122,54 @@
             <td><a href="{{ base }}?level={{ lvl }}">{{ lvl }}</a></td>
             {% for u in data.users %}
               {% set e = row.get(u.id) %}
-              <td{% if e and e.ms == fastest and row|length > 1 %} class="best"{% endif %}>{{ e.ms | dauer if e else '' }}</td>
+              <td{% if e and e.ms == fastest and row|length > 1 %} class="best"{% endif %}>{{ e.ms | dauer if e else '·' }}</td>
             {% endfor %}
           </tr>
         {% endfor %}
         </tbody>
       </table></div>
-      <p class="hint">Bestzeit je Spieler, hervorgehoben ist die schnellste. Tipp auf ein Level für die Rangliste.</p>
+      <p class="hint">Bestzeit je Spieler, farbig ist die schnellste. Tipp auf ein Level für die Rangliste.</p>
     </section>
     {% endif %}
   {% endif %}
   </main>
+  <script>
+    // Live: alle 5 s kurz nachfragen (meist nur ein 304), nur solange die Seite sichtbar ist.
+    // Hat sich etwas geaendert, wird der Inhalt ausgetauscht, ohne die Seite neu zu laden.
+    (function () {
+      var etag = null, busy = false, dot = document.getElementById("live");
+      async function check() {
+        if (document.hidden || busy) return;
+        busy = true;
+        try {
+          var r = await fetch("/api/stats/version", { cache: "no-cache" });
+          var v = r.headers.get("ETag");
+          if (r.ok && v && etag && v !== etag) {
+            var html = await (await fetch(location.href, { cache: "no-store" })).text();
+            var next = new DOMParser().parseFromString(html, "text/html").getElementById("dash-main");
+            if (next) {
+              var y = scrollY, inner = document.querySelector(".scroll.limit"), iy = inner ? inner.scrollTop : 0;
+              document.getElementById("dash-main").replaceWith(next);
+              var ni = document.querySelector(".scroll.limit"); if (ni) ni.scrollTop = iy;
+              scrollTo(0, y);
+              dot.classList.remove("ping"); void dot.offsetWidth; dot.classList.add("ping");
+            }
+          }
+          if (r.ok && v) etag = v;
+          dot.classList.remove("off");
+        } catch (e) { dot.classList.add("off"); }
+        busy = false;
+      }
+      var timer = 0;
+      function run() {
+        clearInterval(timer);
+        if (document.hidden) return; // im Hintergrund: gar kein Timer
+        check();
+        timer = setInterval(check, 5000);
+      }
+      document.addEventListener("visibilitychange", run);
+      run();
+    })();
+  </script>
 </body>
 </html>

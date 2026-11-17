@@ -102,14 +102,10 @@
 
   <dialog id="dlg-levels">
     <h2>Level wählen</h2>
-    <p><span id="player-line"></span><br>Freigeschaltet bis Level <b id="max-level">1</b></p>
-    <label class="field">
-      <span>Levelnummer</span>
-      <input type="number" id="level-input" min="1" inputmode="numeric">
-    </label>
+    <p id="player-line"></p>
+    <div class="level-grid" id="level-grid" role="list"></div>
     <div class="dlg-actions">
-      <button class="btn text" id="levels-cancel">Abbrechen</button>
-      <button class="btn filled" id="levels-go">Spielen</button>
+      <button class="btn text" id="levels-cancel">Schließen</button>
     </div>
     <div class="dlg-links">
       <a class="btn text" id="stats-link" href="/dashboard">Statistik</a>

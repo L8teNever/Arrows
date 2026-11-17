@@ -115,3 +115,14 @@ def add_result(con, name: str, level: int, ms: int, mistakes: int, play_ms: int)
         (nxt, nxt, max(0, min(play_ms, 6 * 3600_000)), now(), u["id"]),
     )
     return con.execute("SELECT * FROM users WHERE id = ?", (u["id"],)).fetchone()
+
+
+def stats_version(con) -> str:
+    """Aendert sich bei jedem neuen Ergebnis, Fortschritt oder Konto (fuer die Live-Statistik)."""
+    r = con.execute("SELECT COALESCE(MAX(id), 0), COUNT(*) FROM results").fetchone()
+    u = con.execute("SELECT COUNT(*), COALESCE(SUM(play_ms), 0), COALESCE(SUM(level), 0), COALESCE(MAX(last_seen), 0) FROM users").fetchone()
+    return "-".join(str(x) for x in (*r, *u))
+
+
+def best_times(con, user_id: int) -> dict[int, int]:
+    return {r[0]: r[1] for r in con.execute("SELECT level, MIN(ms) FROM results WHERE user_id = ? GROUP BY level", (user_id,))}
