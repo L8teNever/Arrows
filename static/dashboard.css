@@ -1,0 +1,21 @@
+/* Statistik-Seite: normal scrollbar, Karten im Material-3-Stil */
+body.dash { display: block; user-select: text; min-height: 100%; }
+.dash .top-app-bar { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.dash a { color: var(--primary); text-decoration: none; }
+.dash a.icon-btn { color: var(--on-surface-variant); }
+.dash-main { max-width: 1100px; margin: 0 auto; padding: 0 16px 32px; display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--surface-container-low); border-radius: var(--shape-xl); padding: 20px; }
+.card h2 { margin: 0 0 12px; font-size: 22px; font-weight: 400; }
+.sub-line, .hint, .empty { color: var(--on-surface-variant); font-size: 14px; margin: 0 0 12px; }
+.hint { margin: 12px 0 0; font-size: 12px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; white-space: nowrap; }
+th { text-align: left; font-weight: 500; color: var(--on-surface-variant); font-size: 12px; letter-spacing: .4px; padding: 8px 12px; border-bottom: 1px solid var(--outline-variant); }
+td { padding: 10px 12px; border-bottom: 1px solid var(--outline-variant); font-variant-numeric: tabular-nums; }
+tbody tr:last-child td { border-bottom: 0; }
+tr.top td, td.best { color: var(--on-primary-container); background: var(--primary-container); font-weight: 500; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.kpis div { background: var(--surface-container-high); border-radius: var(--shape-l); padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.kpis b { font-size: 20px; font-weight: 500; }
+.kpis span { font-size: 12px; color: var(--on-surface-variant); }
+.dash .btn.text { margin-top: 8px; padding: 0 12px; display: inline-flex; }

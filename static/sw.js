@@ -1,6 +1,6 @@
 /* Service Worker: App laeuft offline, Netz wird nur genutzt wenn noetig.
    Bei Aenderungen an HTML/CSS/JS die VERSION hochzaehlen. */
-const VERSION = "arrows-v5";
+const VERSION = "arrows-v6";
 const LEVELS = "arrows-levels-g4"; // hochzaehlen, wenn sich der Levelgenerator aendert
 const MAX_LEVELS = 60; // so viele Level bleiben auf dem Geraet
 const SHELL = ["/", "/static/app.js", "/static/style.css", "/static/icon.svg", "/manifest.webmanifest", "/icon-192.png"];
@@ -40,6 +40,15 @@ self.addEventListener("fetch", (e) => {
         return res;
       })
     );
+    return;
+  }
+
+  // Konten und Statistik immer frisch vom Server
+  if (url.pathname.startsWith("/api/") || url.pathname === "/dashboard") return;
+
+  // /Simon usw.: gleiche App-Seite, auch offline
+  if (e.request.mode === "navigate") {
+    e.respondWith(caches.match("/").then((hit) => hit || fetch(e.request)));
     return;
   }
 

@@ -77,7 +77,7 @@
 
   <dialog id="dlg-levels">
     <h2>Level wählen</h2>
-    <p>Freigeschaltet bis Level <b id="max-level">1</b></p>
+    <p><span id="player-line"></span><br>Freigeschaltet bis Level <b id="max-level">1</b></p>
     <label class="field">
       <span>Levelnummer</span>
       <input type="number" id="level-input" min="1" inputmode="numeric">
@@ -85,6 +85,23 @@
     <div class="dlg-actions">
       <button class="btn text" id="levels-cancel">Abbrechen</button>
       <button class="btn filled" id="levels-go">Spielen</button>
+    </div>
+    <div class="dlg-links">
+      <a class="btn text" id="stats-link" href="/dashboard">Statistik</a>
+      <button class="btn text" id="switch-player">Konto wechseln</button>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-name">
+    <h2>Wie heißt du?</h2>
+    <p>Mit Namen wird dein Fortschritt gespeichert und du landest in der Statistik. Später kommst du direkt über <b>/DeinName</b> rein.</p>
+    <label class="field">
+      <span>Name</span>
+      <input id="name-input" maxlength="24" autocomplete="nickname" autocapitalize="words">
+    </label>
+    <div class="dlg-actions">
+      <button class="btn text" id="name-guest">Ohne Namen</button>
+      <button class="btn filled" id="name-go">Los</button>
     </div>
   </dialog>
 

@@ -5,3 +5,8 @@ services:
     ports:
       - "8080:8080"
     restart: unless-stopped
+    volumes:
+      - arrows-data:/data   # Konten und Zeiten
+
+volumes:
+  arrows-data:

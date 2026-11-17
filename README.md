@@ -12,6 +12,14 @@ docker compose up -d
 
 Das Image baut GitHub Actions bei jedem Push auf `main` nach `ghcr.io/l8tenever/arrows`. Danach läuft das Spiel auf http://localhost:8080, live unter https://arrow.kulbarts.com. Am Handy kannst du es über „Zum Startbildschirm hinzufügen“ als App installieren.
 
+## Konten und Statistik
+
+- `/Simon` spielt mit Simons Konto, ein neuer Name (z. B. `/Lena`) legt beim ersten Aufruf ein Konto an. Der Fortschritt liegt auf dem Server, man spielt auf jedem Gerät weiter.
+- `/` fragt nach dem Namen (oder Gast, nur lokal). Die installierte App merkt sich das letzte Konto.
+- `/dashboard` zeigt alle Spieler (Level, Spielzeit, Ø pro Level, Tempo im Vergleich, Fehler), die Zeiten pro Level und eine Detailseite je Spieler (`?u=Name`) bzw. Rangliste je Level (`?level=12`).
+- Gezählt wird nur aktive Spielzeit (App sichtbar). Daten in SQLite unter `/data/arrows.db` (Docker-Volume).
+- Kein Passwort: wer den Namen kennt, kann mit dem Konto spielen.
+
 ## Sparsam am Handy
 
 - Keine externen Schriften oder Bibliotheken; die Icons sind ein kleines SVG im HTML.

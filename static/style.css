@@ -167,7 +167,10 @@ dialog p { margin: 0 0 16px; color: var(--on-surface-variant); font-size: 14px; 
 .dlg-icon { width: 28px; height: 28px; margin: 0 auto; color: var(--primary); }
 .dlg-icon.err { color: var(--error); }
 .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
-#dlg-levels { text-align: left; }
+#dlg-levels, #dlg-name { text-align: left; }
+#dlg-name h2 { margin-top: 0; }
+.dlg-links { display: flex; justify-content: space-between; margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--outline-variant); }
+a.btn { text-decoration: none; }
 #dlg-levels h2 { margin-top: 0; }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--primary); }
 .field input {

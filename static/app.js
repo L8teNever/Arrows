@@ -12,11 +12,26 @@ const levelUrl = (n) => `/api/level/${n}?g=${GEN}`;
 const $ = (id) => document.getElementById(id);
 const board = $("board");
 
+/* ---------- Konto ---------- */
+// /Simon = Simons Konto (wird beim ersten Mal angelegt). Ohne Namen: als Gast, nur auf diesem Geraet.
+const NAME_RE = /^[A-Za-z0-9ÄÖÜäöüß_-]{1,24}$/;
+const RESERVED = ["api", "static", "dashboard", "healthz", "sw", "manifest", "icon"];
+const validName = (n) => NAME_RE.test(n) && !RESERVED.includes(n.toLowerCase());
+let player = (() => {
+  let n = "";
+  try { n = decodeURIComponent(location.pathname.slice(1)); } catch {}
+  if (validName(n)) return n;
+  const last = localStorage.getItem("arrows.player"); // App vom Startbildschirm startet auf "/"
+  if (last && validName(last)) { history.replaceState(null, "", "/" + encodeURIComponent(last)); return last; }
+  return null;
+})();
+const key = (k) => (player ? `arrows.u.${player.toLowerCase()}.${k}` : `arrows.${k}`);
+
 const store = {
-  get level() { return +localStorage.getItem("arrows.level") || 1; },
-  set level(v) { localStorage.setItem("arrows.level", v); },
-  get max() { return +localStorage.getItem("arrows.max") || 1; },
-  set max(v) { localStorage.setItem("arrows.max", Math.max(v, this.max)); },
+  get level() { return +localStorage.getItem(key("level")) || 1; },
+  set level(v) { localStorage.setItem(key("level"), v); },
+  get max() { return +localStorage.getItem(key("max")) || 1; },
+  set max(v) { localStorage.setItem(key("max"), Math.max(v, this.max)); },
   get theme() { return localStorage.getItem("arrows.theme"); },
   set theme(v) { localStorage.setItem("arrows.theme", v); },
 };
@@ -51,6 +66,68 @@ function snackbar(text) {
 function vibrate(ms) { navigator.vibrate?.(ms); }
 const center = ([x, y]) => [(x + 0.5) * C, (y + 0.5) * C];
 
+/* ---------- Server-Abgleich (sparsam) ----------
+   Gesendet wird nur: ein Ergebnis beim Schaffen eines Levels, das Level beim Wechseln und die
+   Spielzeit beim Verlassen der App. Ohne Netz bleiben Ergebnisse im Postausgang und gehen spaeter raus. */
+const api = (path) => `/api/u/${encodeURIComponent(player)}${path}`;
+let serverLevel = null;  // Level, das der Server kennt (spart doppelte Meldungen)
+let playUnsent = +localStorage.getItem(key("playUnsent")) || 0; // Spielzeit seit der letzten Meldung (ms)
+
+const outbox = {
+  get() { try { return JSON.parse(localStorage.getItem("arrows.outbox")) || []; } catch { return []; } },
+  set(v) { localStorage.setItem("arrows.outbox", JSON.stringify(v)); },
+};
+let flushing = false;
+async function flushOutbox() {
+  if (flushing || !navigator.onLine) return;
+  flushing = true;
+  try {
+    let box = outbox.get();
+    while (box.length) {
+      const job = box[0];
+      let res;
+      try {
+        res = await fetch(job.url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(job.body), keepalive: true });
+      } catch { break; } // kein Netz: spaeter nochmal
+      if (res.status >= 500) break;
+      box = outbox.get().slice(1); // 2xx oder 4xx (ungueltig): raus aus dem Postausgang
+      outbox.set(box);
+    }
+  } finally { flushing = false; }
+}
+addEventListener("online", flushOutbox);
+
+function reportProgress(beacon) {
+  if (!player || !state) return;
+  const sent = Math.round(playUnsent);
+  const body = JSON.stringify({ level: state.level, playMs: sent });
+  if (beacon) {
+    if (navigator.sendBeacon?.(api("/progress"), new Blob([body], { type: "application/json" }))) playUnsent -= sent;
+  } else {
+    fetch(api("/progress"), { method: "POST", headers: { "Content-Type": "application/json" }, body })
+      .then((r) => { if (r.ok) { playUnsent -= sent; serverLevel = state.level; } })
+      .catch(() => {});
+  }
+  localStorage.setItem(key("playUnsent"), Math.round(playUnsent));
+}
+
+/* ---------- Spielzeit: laeuft nur, solange die App sichtbar ist ---------- */
+let segStart = null;
+function clockStart() {
+  if (state && !state.over && segStart === null && document.visibilityState === "visible") segStart = performance.now();
+}
+function clockStop() {
+  if (segStart === null || !state) return;
+  const d = performance.now() - segStart;
+  segStart = null;
+  state.activeMs += d;
+  playUnsent += d;
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") { clockStop(); reportProgress(true); }
+  else { clockStart(); flushOutbox(); }
+});
+
 /* ---------- Ausrichtung ---------- */
 // Level kommen hochkant vom Server. Quer (Tablet, Handy gedreht) wird gespiegelt:
 // x und y tauschen, Richtungen mit. Bleibt genauso loesbar.
@@ -83,6 +160,7 @@ async function loadLevel(n) {
     snackbar("Level konnte nicht geladen werden");
     return;
   }
+  clockStop(); // Zeit des alten Versuchs verbuchen
   store.level = n;
   state = {
     level: n,
@@ -93,7 +171,7 @@ async function loadLevel(n) {
     left: data.arrows.length,
     lives: LIVES,
     mistakes: 0,
-    started: performance.now(),
+    activeMs: 0,
     over: false,
     wide: false,
     big: !!data.big,
@@ -104,14 +182,20 @@ async function loadLevel(n) {
   for (const a of state.arrows.values()) for (const [x, y] of a.cells) state.grid[y * data.width + x] = a.id;
   // Formen nicht drehen, ein Herz soll aufrecht bleiben
   if (!state.shape && wantWide()) transpose();
-  $("level-info").textContent = `${state.w} × ${state.h} · ${data.arrows.length} Pfeile`;
+  setInfo();
   const special = state.big ? "Großes Feld" : state.shape;
   $("big-chip").hidden = !special;
   $("big-text").textContent = special || "";
   if (state.big) snackbar("Großes Feld – lange Pfeile!");
   else if (state.shape) snackbar(`Sonderform: ${state.shape}`);
   render();
+  clockStart();
+  if (player && serverLevel !== null && serverLevel !== n) reportProgress(false);
   prefetch(n + 1);
+}
+
+function setInfo() {
+  $("level-info").textContent = `${player ? player + " · " : ""}${state.w} × ${state.h} · ${state.arrows.size} Pfeile`;
 }
 
 /** Naechstes Level einmalig im Leerlauf holen, landet im Service-Worker-Cache (offline spielbar). */
@@ -228,7 +312,7 @@ addEventListener("resize", () => {
     const busy = [...state.arrows.values()].some((a) => a.busy || (a.removed && a.el?.isConnected));
     if (!busy && !state.shape && wantWide() !== state.wide) {
       transpose();
-      $("level-info").textContent = `${state.w} × ${state.h} · ${state.arrows.size} Pfeile`;
+      setInfo();
       render();
     } else fitBoard();
   });
@@ -343,6 +427,7 @@ async function tap(id) {
   a.busy = false;
 
   if (state.lives <= 0) {
+    clockStop();
     state.over = true;
     $("dlg-lose").showModal();
   } else {
@@ -353,9 +438,19 @@ async function tap(id) {
 
 function checkWin() {
   if (state.left > 0 || state.over) return;
+  clockStop();
   state.over = true;
   store.max = state.level + 1;
-  const secs = Math.round((performance.now() - state.started) / 1000);
+  if (player) {
+    // Ergebnis + bisher ungemeldete Spielzeit in einem Rutsch
+    const sent = Math.round(playUnsent);
+    outbox.set([...outbox.get(), { url: api("/result"), body: { level: state.level, ms: Math.round(state.activeMs), mistakes: state.mistakes, playMs: sent } }]);
+    playUnsent -= sent;
+    localStorage.setItem(key("playUnsent"), Math.round(playUnsent));
+    serverLevel = state.level + 1;
+    flushOutbox();
+  }
+  const secs = Math.round(state.activeMs / 1000);
   const time = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
   const err = state.mistakes === 0 ? "ohne Fehler" : `${state.mistakes} Fehler`;
   $("win-text").textContent = `Zeit ${time} · ${err}`;
@@ -379,6 +474,8 @@ $("win-replay").onclick = () => { $("dlg-win").close(); loadLevel(state.level); 
 $("lose-retry").onclick = () => { $("dlg-lose").close(); loadLevel(state.level); };
 
 function openLevels() {
+  $("stats-link").href = player ? `/dashboard?u=${encodeURIComponent(player)}` : "/dashboard";
+  $("player-line").textContent = player ? `Konto: ${player}` : "Als Gast (nur auf diesem Gerät)";
   $("max-level").textContent = store.max;
   $("level-input").max = store.max;
   $("level-input").value = state?.level || 1;
@@ -395,8 +492,50 @@ $("levels-go").onclick = () => {
 };
 $("level-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("levels-go").click(); });
 
-applyTheme();
-loadLevel(store.level);
+/* ---------- Name waehlen (nur auf "/" ohne gespeicherten Namen) ---------- */
+function askName() {
+  $("dlg-name").showModal();
+  $("name-input").focus();
+}
+$("name-go").onclick = () => {
+  const n = $("name-input").value.trim();
+  if (!validName(n)) { snackbar("Nur Buchstaben, Zahlen, - und _ (max. 24)"); return; }
+  $("dlg-name").close();
+  location.href = "/" + encodeURIComponent(n);
+};
+$("name-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("name-go").click(); });
+$("name-guest").onclick = () => { $("dlg-name").close(); localStorage.setItem("arrows.guest", "1"); };
+$("switch-player").onclick = () => {
+  localStorage.removeItem("arrows.player");
+  localStorage.removeItem("arrows.guest");
+  location.href = "/";
+};
+
+async function start() {
+  applyTheme();
+  if (!player) {
+    if (!localStorage.getItem("arrows.guest")) askName();
+    loadLevel(store.level);
+    return;
+  }
+  localStorage.setItem("arrows.player", player);
+  document.title = `Arrows – ${player}`;
+  let level = store.level;
+  try {
+    const res = await fetch(api(""));
+    if (res.ok) {
+      const u = await res.json();
+      player = u.name; // Schreibweise wie beim Anlegen
+      serverLevel = u.level;
+      // Server gilt, ausser dieses Geraet ist weiter (Ergebnisse noch im Postausgang)
+      if (store.max <= u.max) level = u.level;
+      store.max = u.max;
+    }
+  } catch {}
+  loadLevel(level);
+  flushOutbox();
+}
+start();
 
 if ("serviceWorker" in navigator)
 {
